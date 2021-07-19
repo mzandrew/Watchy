@@ -197,3 +197,4 @@ const GFXglyph DSEG7_Classic_Regular_15Glyphs[] PROGMEM = {
 };
 const GFXfont DSEG7_Classic_Regular_15 PROGMEM = {
 (uint8_t  *)DSEG7_Classic_Regular_15Bitmaps,(GFXglyph *)DSEG7_Classic_Regular_15Glyphs,0x20, 0x7E, 17};
+

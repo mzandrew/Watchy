@@ -197,3 +197,4 @@ const GFXglyph DSEG7_Classic_Regular_39Glyphs[] PROGMEM = {
 };
 const GFXfont DSEG7_Classic_Regular_39 PROGMEM = {
 (uint8_t  *)DSEG7_Classic_Regular_39Bitmaps,(GFXglyph *)DSEG7_Classic_Regular_39Glyphs,0x20, 0x7E, 43};
+

@@ -20,3 +20,4 @@ class Watchy7SEG : public Watchy{
 };
 
 #endif
+
