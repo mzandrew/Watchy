@@ -1,6 +1,9 @@
-#include "Watchy_7_SEG.h"
+#include <string>
+#include "Watchy_mza.h"
 
 #define DARKMODE true
+#define TWELVEHOURMODE
+#define RESETSTEPSEVERYDAY
 
 const uint8_t BATTERY_SEGMENT_WIDTH = 7;
 const uint8_t BATTERY_SEGMENT_HEIGHT = 11;
@@ -8,9 +11,9 @@ const uint8_t BATTERY_SEGMENT_SPACING = 9;
 const uint8_t WEATHER_ICON_WIDTH = 48;
 const uint8_t WEATHER_ICON_HEIGHT = 32;
 
-Watchy7SEG::Watchy7SEG(){} //constructor
+WatchyMZA::WatchyMZA(){} //constructor
 
-void Watchy7SEG::drawWatchFace(){
+void WatchyMZA::drawWatchFace(){
     display.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
     display.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
     drawTime();
@@ -24,36 +27,55 @@ void Watchy7SEG::drawWatchFace(){
     }
 }
 
-void Watchy7SEG::drawTime(){
-    display.setFont(&DSEG7_Classic_Bold_53);
+// modified 2021-07-18 by mza to have the option for 12-hour time (must change the "xadvance" to match that for 0-9 in the font .h file)
+// modified 2021-07-18 to have the option to reset the step count every day
+void WatchyMZA::drawTime(){
+    display.setFont(&DSEG7_Classic_Bold_53_prime);
     display.setCursor(5, 53+5);
-    if(currentTime.Hour < 10){
+    uint8_t minute = currentTime.Minute;
+    uint8_t hour = currentTime.Hour;
+#ifdef RESETSTEPSEVERYDAY
+    uint32_t stepCount = sensor.getCounter(); // potentially upload this somewhere...
+    if (hour==0 && minute==0) {
+        sensor.resetStepCounter();
+    }
+#endif
+#ifdef TWELVEHOURMODE
+    std::string ampm = int(hour/12) ? "pm" : "am";
+//  0,1,2,3,4,5,6,7,8,9,10,11  12,13,14,15,16,17,18,19,20,21,22,23 24-hour-mode
+// 12,1,2,3,4,5,6,7,8,9,10,11  12, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11 12-hour-mode
+    hour %= 12;
+    if (hour==0) {
+        hour = 12;
+    }
+    if(hour < 10){
+        display.print(" ");
+    }
+#else
+    if(hour < 10){
         display.print("0");
     }
-    display.print(currentTime.Hour);
+#endif
+    display.print(hour);
     display.print(":");
-    if(currentTime.Minute < 10){
+    if(minute < 10){
         display.print("0");
     }  
-    display.println(currentTime.Minute);  
+    display.println(minute);
 }
 
-void Watchy7SEG::drawDate(){
+void WatchyMZA::drawDate(){
     display.setFont(&Seven_Segment10pt7b);
-
     int16_t  x1, y1;
     uint16_t w, h;
-
     String dayOfWeek = dayStr(currentTime.Wday);
     display.getTextBounds(dayOfWeek, 5, 85, &x1, &y1, &w, &h);
     display.setCursor(85 - w, 85);
     display.println(dayOfWeek);
-
     String month = monthShortStr(currentTime.Month);
     display.getTextBounds(month, 60, 110, &x1, &y1, &w, &h);
     display.setCursor(85 - w, 110);
     display.println(month);
-
     display.setFont(&DSEG7_Classic_Bold_25);
     display.setCursor(5, 120);
     if(currentTime.Day < 10){
@@ -64,14 +86,14 @@ void Watchy7SEG::drawDate(){
     display.println(currentTime.Year + YEAR_OFFSET);// offset from 1970, since year is stored in uint8_t
 }
 
-void Watchy7SEG::drawSteps(){
+void WatchyMZA::drawSteps(){
     uint32_t stepCount = sensor.getCounter();
     display.drawBitmap(10, 165, steps, 19, 23, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
     display.setCursor(35, 190);
     display.println(stepCount);
 }
 
-void Watchy7SEG::drawBattery(){
+void WatchyMZA::drawBattery(){
     display.drawBitmap(154, 73, battery, 37, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
     display.fillRect(159, 78, 27, BATTERY_SEGMENT_HEIGHT, DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);//clear battery segments
     int8_t batteryLevel = 0;
@@ -88,19 +110,15 @@ void Watchy7SEG::drawBattery(){
     else if(VBAT <= 3.80){
         batteryLevel = 0;
     }
-
     for(int8_t batterySegments = 0; batterySegments < batteryLevel; batterySegments++){
         display.fillRect(159 + (batterySegments * BATTERY_SEGMENT_SPACING), 78, BATTERY_SEGMENT_WIDTH, BATTERY_SEGMENT_HEIGHT, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
     }
 }
 
-void Watchy7SEG::drawWeather(){
-
+void WatchyMZA::drawWeather(){
     weatherData currentWeather = getWeatherData();
-
     int8_t temperature = currentWeather.temperature;
     int16_t weatherConditionCode = currentWeather.weatherConditionCode;   
-
     display.setFont(&DSEG7_Classic_Regular_39);
     int16_t  x1, y1;
     uint16_t w, h;
@@ -109,7 +127,6 @@ void Watchy7SEG::drawWeather(){
     display.println(temperature);
     display.drawBitmap(165, 110, strcmp(TEMP_UNIT, "metric") == 0 ? celsius : fahrenheit, 26, 20, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
     const unsigned char* weatherIcon;
-
     //https://openweathermap.org/weather-conditions
     if(weatherConditionCode > 801){//Cloudy
     weatherIcon = cloudy;
