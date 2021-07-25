@@ -35,8 +35,9 @@ void WatchyMZA::drawTime(){
     uint8_t minute = currentTime.Minute;
     uint8_t hour = currentTime.Hour;
 #ifdef RESETSTEPSEVERYDAY
-    uint32_t stepCount = sensor.getCounter(); // potentially upload this somewhere...
+    static uint32_t oldStepCount = 0;
     if (hour==0 && minute==0) {
+        oldStepCount = sensor.getCounter(); // potentially upload this somewhere...
         sensor.resetStepCounter();
     }
 #endif
@@ -148,4 +149,3 @@ void WatchyMZA::drawWeather(){
     return;
     display.drawBitmap(145, 158, weatherIcon, WEATHER_ICON_WIDTH, WEATHER_ICON_HEIGHT, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 }
-
