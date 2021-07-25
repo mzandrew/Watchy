@@ -1,4 +1,3 @@
-#include <string>
 #include "Watchy_mza.h"
 
 #define DARKMODE true
@@ -42,7 +41,7 @@ void WatchyMZA::drawTime(){
     }
 #endif
 #ifdef TWELVEHOURMODE
-    std::string ampm = int(hour/12) ? "pm" : "am";
+    String ampm = int(hour/12) ? "pm" : "am";
 //  0,1,2,3,4,5,6,7,8,9,10,11  12,13,14,15,16,17,18,19,20,21,22,23 24-hour-mode
 // 12,1,2,3,4,5,6,7,8,9,10,11  12, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11 12-hour-mode
     hour %= 12;
