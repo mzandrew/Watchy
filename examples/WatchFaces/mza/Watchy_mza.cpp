@@ -4,12 +4,12 @@
 #include "DSEG14_Classic_25.h"
 #include "DSEG7_Classic_Bold_25.h"
 #include "DSEG7_Classic_Bold_53_prime.h"
-#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS
 #include <WiFi.h>
 #include "WiFiClientSecure.h"
 #include <WiFiUdp.h>
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
+#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
 #define AIO_SERVER     "io.adafruit.com"
 #define AIO_SERVERPORT 8883
 
@@ -102,6 +102,7 @@ void WatchyMZA::setTimeViaNTP() {
 		Serial.println("didn't get a response");
 	}
 	WiFi.disconnect();
+	WiFi.mode(WIFI_OFF);
 }
 
 // setup and MQTT_connect below are from https://github.com/adafruit/Adafruit_MQTT_Library/blob/master/examples/adafruitio_anon_time_esp8266/adafruitio_anon_time_esp8266.ino
@@ -236,6 +237,10 @@ void WatchyMZA::drawTime(){
 	if (hour==0 && minute==1) {
 		setTimeViaNTP();
 	}
+	if (minute%30==2) {
+//		Serial.println(timestring);
+		getWeatherData();
+	}
 }
 
 void WatchyMZA::uploadStepsAndClear() {
@@ -244,6 +249,7 @@ void WatchyMZA::uploadStepsAndClear() {
 			feed.publish(oldStepCount); // upload this somewhere
 			mqtt.disconnect();
 			WiFi.disconnect();
+			WiFi.mode(WIFI_OFF);
 			Serial.print("published yesterday's step count: "); Serial.println(oldStepCount);
 			sensor.resetStepCounter();
 			oldStepCount = 0;
@@ -301,8 +307,38 @@ void WatchyMZA::drawBattery(){
     }
 }
 
+extern RTC_DATA_ATTR weatherData currentWeather;
+
+void WatchyMZA::getWeatherData() {
+	if (connectWiFi()) { // Use Weather API for live data if WiFi is connected
+		Serial.println("grabbing weather data for " CITY_NAME);
+		HTTPClient http;
+		http.setConnectTimeout(3000); // 3 second max timeout
+		String weatherQueryURL = String(OPENWEATHERMAP_URL) + String(CITY_NAME) + String(",") + String(COUNTRY_CODE) + String("&units=") + String(TEMP_UNIT) + String("&appid=") + String(OPENWEATHERMAP_APIKEY);
+		http.begin(weatherQueryURL.c_str());
+		int httpResponseCode = http.GET();
+		if (httpResponseCode == 200) {
+			String payload = http.getString();
+			JSONVar responseObject = JSON.parse(payload);
+			currentWeather.temperature = int(responseObject["main"]["temp"]);
+			currentWeather.weatherConditionCode = int(responseObject["weather"][0]["id"]);
+		} else {
+			Serial.println("error fetching weather data");
+		}
+		http.end();
+		WiFi.mode(WIFI_OFF);
+		btStop();
+	} else { // No WiFi, use RTC Temperature
+		uint8_t temperature = RTC.temperature() / 4; //celsius
+		if(strcmp(TEMP_UNIT, "imperial") == 0) {
+			temperature = temperature * 9. / 5. + 32.; //fahrenheit
+		}
+		currentWeather.temperature = temperature;
+		currentWeather.weatherConditionCode = 800;
+	}
+}
+
 void WatchyMZA::drawWeather(){
-    weatherData currentWeather = getWeatherData();
     int8_t temperature = currentWeather.temperature;
     int16_t weatherConditionCode = currentWeather.weatherConditionCode;   
     display.setFont(&DSEG7_Classic_Bold_25);

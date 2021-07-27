@@ -20,6 +20,7 @@ public:
 		int MQTT_connect();
 		void uploadStepsAndClear();
 		void setTimeViaNTP();
+		void getWeatherData();
 };
 
 #endif
