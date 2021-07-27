@@ -34,6 +34,11 @@
 #define Y_POSITION_STEPS       (167)
 #define Y_POSITION_BATTERY     (Y_POSITION_TEMPERATURE+BATTERY_SEGMENT_HEIGHT-2)
 
+#ifdef TWELVEHOURMODE
+	#define X_POSITION_TIME    (0)
+#else
+	#define X_POSITION_TIME    (5)
+#endif
 #define X_POSITION_WEATHER (10)
 #define X_POSITION_WIFI    (65)
 #define X_POSITION_BLE     (90)
@@ -152,24 +157,23 @@ uint32_t oldStepCount = 0;
 // modified 2021-07-18 to have the option to reset the step count every day
 // modified 2021-07-26 to publish yesterday's step count on an adafruit IO feed before clearing it
 void WatchyMZA::drawTime(){
-    display.setFont(&DSEG7_Classic_Bold_53_prime);
-    display.setCursor(5, Y_POSITION_TIME);
-    uint8_t minute = currentTime.Minute;
-    uint8_t hour = currentTime.Hour;
+	display.setFont(&DSEG7_Classic_Bold_53_prime);
+	display.setCursor(X_POSITION_TIME, Y_POSITION_TIME);
+	uint8_t minute = currentTime.Minute;
+	uint8_t hour = currentTime.Hour;
+	char timestring[10];
 #ifdef TWELVEHOURMODE
-    String ampm = int(hour/12) ? "pm" : "am";
+	String ampm = int(hour/12) ? "pm" : "am";
 //  0,1,2,3,4,5,6,7,8,9,10,11  12,13,14,15,16,17,18,19,20,21,22,23 24-hour-mode
 // 12,1,2,3,4,5,6,7,8,9,10,11  12, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11 12-hour-mode
-    hour %= 12;
-    if (hour==0) { hour = 12; }
-    if(hour < 10){ display.print(" "); }
+	hour %= 12;
+	if (hour==0) { hour = 12; }
+	sprintf(timestring, "%2d:%02d", hour, minute);
 #else
-    if(hour < 10){ display.print("0"); }
+	sprintf(timestring, "%02d:%02d", hour, minute);
 #endif
-    display.print(hour);
-    display.print(":");
-    if(minute < 10){ display.print("0"); }
-    display.println(minute);
+//	Serial.println(timestring);
+	display.print(timestring);
 #ifdef RESETSTEPSEVERYDAY
 	if (hour==0 && minute==0) {
 		oldStepCount = sensor.getCounter();
