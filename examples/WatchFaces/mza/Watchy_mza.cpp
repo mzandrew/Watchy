@@ -1,4 +1,4 @@
-// last updated 2021-07-25 by mza
+// last updated 2021-07-26 by mza
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
 #include "DSEG14_Classic_25.h"
@@ -38,6 +38,96 @@
 #define X_POSITION_WIFI    (65)
 #define X_POSITION_BLE     (90)
 
+// setup and MQTT_connect below are from https://github.com/adafruit/Adafruit_MQTT_Library/blob/master/examples/adafruitio_anon_time_esp8266/adafruitio_anon_time_esp8266.ino
+/***********************************************************************
+  Adafruit MQTT Library ESP32 Adafruit IO SSL/TLS example
+  Use the latest version of the ESP32 Arduino Core:
+    https://github.com/espressif/arduino-esp32
+  Works great with Adafruit Huzzah32 Feather and Breakout Board:
+    https://www.adafruit.com/product/3405
+    https://www.adafruit.com/products/4172
+  Adafruit invests time and resources providing this open source code,
+  please support Adafruit and open-source hardware by purchasing
+  products from Adafruit!
+  Written by Tony DiCola for Adafruit Industries.
+  Modified by Brent Rubell for Adafruit Industries
+  MIT license, all text above must be included in any redistribution
+ **********************************************************************/
+#include <WiFi.h>
+#include "WiFiClientSecure.h"
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
+#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY
+#define AIO_SERVER     "io.adafruit.com"
+#define AIO_SERVERPORT 8883
+
+// WiFiFlientSecure for SSL/TLS support
+WiFiClientSecure client;
+
+// Setup the MQTT client class by passing in the WiFi client and MQTT server and login details.
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
+
+// Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
+Adafruit_MQTT_Publish feed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/" AIO_FEED);
+
+// io.adafruit.com root CA
+const char* adafruitio_root_ca = \
+    "-----BEGIN CERTIFICATE-----\n" \
+    "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n" \
+    "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n" \
+    "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n" \
+    "QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n" \
+    "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n" \
+    "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n" \
+    "9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n" \
+    "CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n" \
+    "nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n" \
+    "43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n" \
+    "T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n" \
+    "gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n" \
+    "BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n" \
+    "TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n" \
+    "DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n" \
+    "hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n" \
+    "06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n" \
+    "PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n" \
+    "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n" \
+    "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n" \
+    "-----END CERTIFICATE-----\n";
+
+int WatchyMZA::setupMQTT() {
+	Serial.print("Connecting to " WLAN_SSID "...");
+	delay(1000);
+	WiFi.begin(WLAN_SSID, WLAN_PASS);
+	delay(2000);
+	while (WiFi.status() != WL_CONNECTED) {
+		delay(500);
+		Serial.print(".");
+	}
+	Serial.print("  IP address: "); Serial.println(WiFi.localIP());
+	client.setCACert(adafruitio_root_ca); // Set Adafruit IO's root CA
+	return WiFi.status();
+}
+
+// Function to connect and reconnect as necessary to the MQTT server.
+// Should be called in the loop function and it will take care if connecting.
+int WatchyMZA::MQTT_connect() {
+	int8_t ret;
+	if (mqtt.connected()) { return 1; } // Stop if already connected.
+	Serial.print("Connecting to MQTT... ");
+	uint8_t retries = 3;
+	while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+		Serial.println(mqtt.connectErrorString(ret));
+		Serial.println("Retrying MQTT connection in 5 seconds...");
+		mqtt.disconnect();
+		delay(5000);  // wait 5 seconds
+		retries--;
+		if (retries == 0) { return 0; }
+	}
+	Serial.println("Connected!");
+	return 1;
+}
+
 WatchyMZA::WatchyMZA(){} //constructor
 
 void WatchyMZA::drawWatchFace(){
@@ -49,53 +139,51 @@ void WatchyMZA::drawWatchFace(){
 	drawWeather();
 	drawSteps();
 	drawBattery();
-	display.drawBitmap(X_POSITION_WIFI, Y_POSITION_WIFI, WIFI_CONFIGURED ? wifi : wifioff, 26, 18, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-	if(BLE_CONFIGURED){
-		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-	}
+//	display.drawBitmap(X_POSITION_WIFI, Y_POSITION_WIFI, WIFI_CONFIGURED ? wifi : wifioff, 26, 18, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+//	if(BLE_CONFIGURED){
+//		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+//	}
 }
 
 // modified 2021-07-18 by mza to have the option for 12-hour time (must change the "xadvance" to match that for 0-9 in the font .h file)
 // modified 2021-07-18 to have the option to reset the step count every day
+// modified 2021-07-26 to publish yesterday's step count on an adafruit IO feed before clearing it
 void WatchyMZA::drawTime(){
     display.setFont(&DSEG7_Classic_Bold_53_prime);
     display.setCursor(5, Y_POSITION_TIME);
     uint8_t minute = currentTime.Minute;
     uint8_t hour = currentTime.Hour;
-#ifdef RESETSTEPSEVERYDAY
-    static uint32_t oldStepCount = 0;
-    if (hour==0 && minute==0) {
-        oldStepCount = sensor.getCounter(); // potentially upload this somewhere...
-        sensor.resetStepCounter();
-    }
-#endif
 #ifdef TWELVEHOURMODE
     String ampm = int(hour/12) ? "pm" : "am";
 //  0,1,2,3,4,5,6,7,8,9,10,11  12,13,14,15,16,17,18,19,20,21,22,23 24-hour-mode
 // 12,1,2,3,4,5,6,7,8,9,10,11  12, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11 12-hour-mode
     hour %= 12;
-    if (hour==0) {
-        hour = 12;
-    }
-    if(hour < 10){
-        display.print(" ");
-    }
+    if (hour==0) { hour = 12; }
+    if(hour < 10){ display.print(" "); }
 #else
-    if(hour < 10){
-        display.print("0");
-    }
+    if(hour < 10){ display.print("0"); }
 #endif
     display.print(hour);
     display.print(":");
-    if(minute < 10){
-        display.print("0");
-    }  
+    if(minute < 10){ display.print("0"); }
     display.println(minute);
+#ifdef RESETSTEPSEVERYDAY
+	uint32_t oldStepCount = 0;
+	if (hour==0 && minute==0) {
+		oldStepCount = sensor.getCounter();
+		if (setupMQTT() && MQTT_connect()) {
+			feed.publish(oldStepCount); // upload this somewhere
+			Serial.println("published yesterday's step count"); //Serial.println();
+		} else {
+			Serial.println("couldn't publish yesterday's step count!");
+		}
+		sensor.resetStepCounter();
+	}
+#endif
 }
 
 void WatchyMZA::drawDayName(){
 	String dayOfWeek = dayStr(currentTime.Wday);
-	//String dayOfWeek = "ABCDEFGHI";
 	display.setFont(&DSEG14_Classic_Regular_25);
 	int16_t  x1, y1;
 	uint16_t w, h;
