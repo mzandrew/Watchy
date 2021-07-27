@@ -4,6 +4,14 @@
 #include "DSEG14_Classic_25.h"
 #include "DSEG7_Classic_Bold_25.h"
 #include "DSEG7_Classic_Bold_53_prime.h"
+#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS
+#include <WiFi.h>
+#include "WiFiClientSecure.h"
+#include <WiFiUdp.h>
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
+#define AIO_SERVER     "io.adafruit.com"
+#define AIO_SERVERPORT 8883
 
 #define DARKMODE true
 #define TWELVEHOURMODE
@@ -43,6 +51,59 @@
 #define X_POSITION_WIFI    (65)
 #define X_POSITION_BLE     (90)
 
+const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
+byte packetBuffer[ NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
+WiFiUDP UDP;
+
+unsigned long sendNTPpacket(IPAddress &address) {
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  packetBuffer[0] = 0b11100011; // LI, Version, Mode
+  packetBuffer[1] = 0;          // Stratum, or type of clock
+  packetBuffer[2] = 6;          // Polling Interval
+  packetBuffer[3] = 0xEC;       // Peer Clock Precision
+  // 8 bytes of zero for Root Delay & Root Dispersion
+  packetBuffer[12]  = 49;
+  packetBuffer[13]  = 0x4E;
+  packetBuffer[14]  = 49;
+  packetBuffer[15]  = 52;
+  UDP.beginPacket(address, 123); // NTP requests are to port 123
+  UDP.write(packetBuffer, NTP_PACKET_SIZE);
+  UDP.endPacket();
+}
+
+// sendNTPpacket and NTP function code are from Arduino/libraries/WiFi101/examples/WiFiUdpNtpClient/WiFiUdpNtpClient.ino
+void WatchyMZA::setTimeViaNTP() {
+	connectWiFi();
+	unsigned int localPort = 2390; // local port to listen for UDP packets
+	IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
+	UDP.begin(localPort);
+	sendNTPpacket(timeServer); // send an NTP packet to a time server
+	delay(1000);
+	if ( UDP.parsePacket() ) {
+		UDP.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+		unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
+		unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
+		unsigned long secsSince1900 = highWord << 16 | lowWord;
+		const unsigned long seventyYears = 2208988800UL;
+		time_t epoch = secsSince1900 - seventyYears;
+		char timestring[20];
+//		Serial.print("Seconds since Jan 1 1900 = " ); Serial.println(secsSince1900);
+//		Serial.print("epoch time = "); Serial.println(epoch);
+//		sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
+//		Serial.print("UTC time is "); Serial.println(timestring);
+		epoch += (UTC_OFFSET_HOURS) * 3600; // UTC_OFFSET_HOURS is a signed quantity
+//		Serial.print("epoch time (local) = "); Serial.println(epoch);
+		sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
+		Serial.print("setting time to "); Serial.println(timestring);
+		const time_t fudge(3); // fudge factor to allow for upload time, etc. (seconds, YMMV)
+		epoch += fudge;
+		RTC.set(epoch); // set time on RTC
+	} else {
+		Serial.println("didn't get a response");
+	}
+	WiFi.disconnect();
+}
+
 // setup and MQTT_connect below are from https://github.com/adafruit/Adafruit_MQTT_Library/blob/master/examples/adafruitio_anon_time_esp8266/adafruitio_anon_time_esp8266.ino
 /***********************************************************************
   Adafruit MQTT Library ESP32 Adafruit IO SSL/TLS example
@@ -58,13 +119,6 @@
   Modified by Brent Rubell for Adafruit Industries
   MIT license, all text above must be included in any redistribution
  **********************************************************************/
-#include <WiFi.h>
-#include "WiFiClientSecure.h"
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
-#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY
-#define AIO_SERVER     "io.adafruit.com"
-#define AIO_SERVERPORT 8883
 
 // WiFiFlientSecure for SSL/TLS support
 WiFiClientSecure client;
@@ -100,7 +154,7 @@ const char* adafruitio_root_ca = \
     "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n" \
     "-----END CERTIFICATE-----\n";
 
-int WatchyMZA::setupMQTT() {
+int WatchyMZA::connectWiFi() {
 	Serial.print("Connecting to " WLAN_SSID "...");
 //	delay(1000);
 	WiFi.begin(WLAN_SSID, WLAN_PASS);
@@ -179,11 +233,14 @@ void WatchyMZA::drawTime(){
 		oldStepCount = sensor.getCounter();
 	}
 #endif
+	if (hour==0 && minute==1) {
+		setTimeViaNTP();
+	}
 }
 
 void WatchyMZA::uploadStepsAndClear() {
 	if (oldStepCount) {
-		if (setupMQTT() && MQTT_connect()) {
+		if (connectWiFi() && MQTT_connect()) {
 			feed.publish(oldStepCount); // upload this somewhere
 			mqtt.disconnect();
 			WiFi.disconnect();

@@ -16,9 +16,10 @@ public:
 		void drawSteps();
 		void drawWeather();
 		void drawBattery();
-		int setupMQTT();
+		int connectWiFi();
 		int MQTT_connect();
 		void uploadStepsAndClear();
+		void setTimeViaNTP();
 };
 
 #endif
