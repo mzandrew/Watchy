@@ -1,4 +1,4 @@
-// last updated 2021-07-26 by mza
+// last updated 2021-07-27 by mza
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
 #include "DSEG14_Classic_25.h"
@@ -97,16 +97,16 @@ const char* adafruitio_root_ca = \
 
 int WatchyMZA::setupMQTT() {
 	Serial.print("Connecting to " WLAN_SSID "...");
-	delay(1000);
+//	delay(1000);
 	WiFi.begin(WLAN_SSID, WLAN_PASS);
-	delay(2000);
+	delay(500);
 	while (WiFi.status() != WL_CONNECTED) {
 		delay(500);
 		Serial.print(".");
 	}
 	Serial.print("  IP address: "); Serial.println(WiFi.localIP());
 	client.setCACert(adafruitio_root_ca); // Set Adafruit IO's root CA
-	return WiFi.status();
+	return WiFi.status()==WL_CONNECTED;
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -118,9 +118,9 @@ int WatchyMZA::MQTT_connect() {
 	uint8_t retries = 3;
 	while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
 		Serial.println(mqtt.connectErrorString(ret));
-		Serial.println("Retrying MQTT connection in 5 seconds...");
 		mqtt.disconnect();
 		delay(5000);  // wait 5 seconds
+		Serial.println("Retrying MQTT connection... ");
 		retries--;
 		if (retries == 0) { return 0; }
 	}
@@ -137,13 +137,16 @@ void WatchyMZA::drawWatchFace(){
 	drawTime();
 	drawDayName();
 	drawWeather();
-	drawSteps();
 	drawBattery();
 //	display.drawBitmap(X_POSITION_WIFI, Y_POSITION_WIFI, WIFI_CONFIGURED ? wifi : wifioff, 26, 18, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	if(BLE_CONFIGURED){
 //		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	}
+	uploadStepsAndClear();
+	drawSteps();
 }
+
+uint32_t oldStepCount = 0;
 
 // modified 2021-07-18 by mza to have the option for 12-hour time (must change the "xadvance" to match that for 0-9 in the font .h file)
 // modified 2021-07-18 to have the option to reset the step count every day
@@ -168,18 +171,25 @@ void WatchyMZA::drawTime(){
     if(minute < 10){ display.print("0"); }
     display.println(minute);
 #ifdef RESETSTEPSEVERYDAY
-	uint32_t oldStepCount = 0;
 	if (hour==0 && minute==0) {
 		oldStepCount = sensor.getCounter();
+	}
+#endif
+}
+
+void WatchyMZA::uploadStepsAndClear() {
+	if (oldStepCount) {
 		if (setupMQTT() && MQTT_connect()) {
 			feed.publish(oldStepCount); // upload this somewhere
-			Serial.println("published yesterday's step count"); //Serial.println();
+			mqtt.disconnect();
+			WiFi.disconnect();
+			Serial.print("published yesterday's step count: "); Serial.println(oldStepCount);
+			sensor.resetStepCounter();
+			oldStepCount = 0;
 		} else {
 			Serial.println("couldn't publish yesterday's step count!");
 		}
-		sensor.resetStepCounter();
 	}
-#endif
 }
 
 void WatchyMZA::drawDayName(){

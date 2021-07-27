@@ -18,6 +18,7 @@ public:
 		void drawBattery();
 		int setupMQTT();
 		int MQTT_connect();
+		void uploadStepsAndClear();
 };
 
 #endif
