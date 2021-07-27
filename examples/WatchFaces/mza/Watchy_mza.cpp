@@ -190,14 +190,22 @@ int WatchyMZA::MQTT_connect() {
 
 WatchyMZA::WatchyMZA(){} //constructor
 
+extern RTC_DATA_ATTR int weatherIntervalCounter;
+
 void WatchyMZA::drawWatchFace(){
 	display.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
 	display.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 	drawDate();
 	drawTime();
 	drawDayName();
-	drawWeather();
 	drawBattery();
+	if (weatherIntervalCounter >= WEATHER_UPDATE_INTERVAL) {
+		getWeatherData();
+		weatherIntervalCounter = 0;
+	} else {
+		weatherIntervalCounter++;
+	}
+	drawWeather();
 //	display.drawBitmap(X_POSITION_WIFI, Y_POSITION_WIFI, WIFI_CONFIGURED ? wifi : wifioff, 26, 18, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	if(BLE_CONFIGURED){
 //		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
@@ -237,10 +245,8 @@ void WatchyMZA::drawTime(){
 	if (hour==0 && minute==1) {
 		setTimeViaNTP();
 	}
-	if (minute%30==2) {
+//	if (minute%30==2) {
 //		Serial.println(timestring);
-		getWeatherData();
-	}
 }
 
 void WatchyMZA::uploadStepsAndClear() {
