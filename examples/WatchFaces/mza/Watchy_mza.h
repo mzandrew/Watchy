@@ -7,8 +7,8 @@
 #include "icons.h"
 
 class WatchyMZA : public Watchy {
-public:
-	WatchyMZA();
+	public:
+		WatchyMZA();
 		void drawWatchFace();
 		void drawTime();
 		void drawDate();
@@ -21,6 +21,12 @@ public:
 		void uploadStepsAndClear();
 		void setTimeViaNTP();
 		void getWeatherData();
+		void init(String = "");
+	private:
+		static uint16_t _readRegister(uint8_t, uint8_t, uint8_t *, uint16_t);
+		static uint16_t _writeRegister(uint8_t, uint8_t, uint8_t *, uint16_t);
+		void _rtcConfig(String);
+		void _bmaConfig();
 };
 
 #endif

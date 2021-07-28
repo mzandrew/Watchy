@@ -1,4 +1,4 @@
-// last updated 2021-07-27 by mza
+// last updated 2021-07-28 by mza
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
 #include "DSEG14_Classic_25.h"
@@ -51,6 +51,10 @@
 #define X_POSITION_WIFI    (65)
 #define X_POSITION_BLE     (90)
 
+extern RTC_DATA_ATTR weatherData currentWeather;
+extern RTC_DATA_ATTR int weatherIntervalCounter;
+RTC_DATA_ATTR uint32_t oldStepCount = 0;
+
 const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[ NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
 WiFiUDP UDP;
@@ -73,36 +77,38 @@ unsigned long sendNTPpacket(IPAddress &address) {
 
 // sendNTPpacket and NTP function code are from Arduino/libraries/WiFi101/examples/WiFiUdpNtpClient/WiFiUdpNtpClient.ino
 void WatchyMZA::setTimeViaNTP() {
-	connectWiFi();
-	unsigned int localPort = 2390; // local port to listen for UDP packets
-	IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
-	UDP.begin(localPort);
-	sendNTPpacket(timeServer); // send an NTP packet to a time server
-	delay(1000);
-	if ( UDP.parsePacket() ) {
-		UDP.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
-		unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-		unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-		unsigned long secsSince1900 = highWord << 16 | lowWord;
-		const unsigned long seventyYears = 2208988800UL;
-		time_t epoch = secsSince1900 - seventyYears;
-		char timestring[20];
-//		Serial.print("Seconds since Jan 1 1900 = " ); Serial.println(secsSince1900);
-//		Serial.print("epoch time = "); Serial.println(epoch);
-//		sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
-//		Serial.print("UTC time is "); Serial.println(timestring);
-		epoch += (UTC_OFFSET_HOURS) * 3600; // UTC_OFFSET_HOURS is a signed quantity
-//		Serial.print("epoch time (local) = "); Serial.println(epoch);
-		sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
-		Serial.print("setting time to "); Serial.println(timestring);
-		const time_t fudge(3); // fudge factor to allow for upload time, etc. (seconds, YMMV)
-		epoch += fudge;
-		RTC.set(epoch); // set time on RTC
-	} else {
-		Serial.println("didn't get a response");
+	if (connectWiFi()) {
+		unsigned int localPort = 2390; // local port to listen for UDP packets
+		IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
+		UDP.begin(localPort);
+		sendNTPpacket(timeServer); // send an NTP packet to a time server
+		delay(1000);
+		if ( UDP.parsePacket() ) {
+			UDP.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+			unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
+			unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
+			unsigned long secsSince1900 = highWord << 16 | lowWord;
+			const unsigned long seventyYears = 2208988800UL;
+			time_t epoch = secsSince1900 - seventyYears;
+			char timestring[20];
+	//		Serial.print("Seconds since Jan 1 1900 = " ); Serial.println(secsSince1900);
+	//		Serial.print("epoch time = "); Serial.println(epoch);
+	//		sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
+	//		Serial.print("UTC time is "); Serial.println(timestring);
+			epoch += (UTC_OFFSET_HOURS) * 3600; // UTC_OFFSET_HOURS is a signed quantity
+	//		Serial.print("epoch time (local) = "); Serial.println(epoch);
+			sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
+			Serial.print("setting time to "); Serial.println(timestring);
+			const time_t fudge(3); // fudge factor to allow for upload time, etc. (seconds, YMMV)
+			epoch += fudge;
+			delay(600); // extra fudge
+			RTC.set(epoch); // set time on RTC
+		} else {
+			Serial.println("didn't get a response");
+		}
+		WiFi.disconnect();
+		WiFi.mode(WIFI_OFF);
 	}
-	WiFi.disconnect();
-	WiFi.mode(WIFI_OFF);
 }
 
 // setup and MQTT_connect below are from https://github.com/adafruit/Adafruit_MQTT_Library/blob/master/examples/adafruitio_anon_time_esp8266/adafruitio_anon_time_esp8266.ino
@@ -160,13 +166,20 @@ int WatchyMZA::connectWiFi() {
 //	delay(1000);
 	WiFi.begin(WLAN_SSID, WLAN_PASS);
 	delay(500);
+	uint8_t retries = 12;
 	while (WiFi.status() != WL_CONNECTED) {
 		delay(500);
 		Serial.print(".");
+		retries--;
+		if (retries == 0) { Serial.println("  failed"); return 0; }
 	}
-	Serial.print("  IP address: "); Serial.println(WiFi.localIP());
-	client.setCACert(adafruitio_root_ca); // Set Adafruit IO's root CA
-	return WiFi.status()==WL_CONNECTED;
+	if (WiFi.status()==WL_CONNECTED) {
+		Serial.print("  IP address: "); Serial.println(WiFi.localIP());
+		client.setCACert(adafruitio_root_ca); // Set Adafruit IO's root CA
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -190,8 +203,6 @@ int WatchyMZA::MQTT_connect() {
 
 WatchyMZA::WatchyMZA(){} //constructor
 
-extern RTC_DATA_ATTR int weatherIntervalCounter;
-
 void WatchyMZA::drawWatchFace(){
 	display.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
 	display.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
@@ -210,11 +221,20 @@ void WatchyMZA::drawWatchFace(){
 //	if(BLE_CONFIGURED){
 //		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	}
+#ifdef RESETSTEPSEVERYDAY
+	if (currentTime.Hour==0 && currentTime.Minute==0) {
+//	if (currentTime.Minute%10==0) {
+		oldStepCount = sensor.getCounter();
+//		Serial.print("current old step count: "); Serial.println(oldStepCount);
+	}
 	uploadStepsAndClear();
+#endif
 	drawSteps();
+	if (currentTime.Hour==0 && currentTime.Minute==1) {
+//	if (currentTime.Minute==10) {
+		setTimeViaNTP();
+	}
 }
-
-uint32_t oldStepCount = 0;
 
 // modified 2021-07-18 by mza to have the option for 12-hour time (must change the "xadvance" to match that for 0-9 in the font .h file)
 // modified 2021-07-18 to have the option to reset the step count every day
@@ -224,29 +244,20 @@ void WatchyMZA::drawTime(){
 	display.setCursor(X_POSITION_TIME, Y_POSITION_TIME);
 	uint8_t minute = currentTime.Minute;
 	uint8_t hour = currentTime.Hour;
+	uint8_t second = currentTime.Second;
 	char timestring[10];
 #ifdef TWELVEHOURMODE
 	String ampm = int(hour/12) ? "pm" : "am";
 //  0,1,2,3,4,5,6,7,8,9,10,11  12,13,14,15,16,17,18,19,20,21,22,23 24-hour-mode
 // 12,1,2,3,4,5,6,7,8,9,10,11  12, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11 12-hour-mode
-	hour %= 12;
-	if (hour==0) { hour = 12; }
+	hour %= 12; if (hour==0) { hour = 12; }
 	sprintf(timestring, "%2d:%02d", hour, minute);
 #else
 	sprintf(timestring, "%02d:%02d", hour, minute);
 #endif
-//	Serial.println(timestring);
 	display.print(timestring);
-#ifdef RESETSTEPSEVERYDAY
-	if (hour==0 && minute==0) {
-		oldStepCount = sensor.getCounter();
-	}
-#endif
-	if (hour==0 && minute==1) {
-		setTimeViaNTP();
-	}
-//	if (minute%30==2) {
-//		Serial.println(timestring);
+	sprintf(timestring, "%2d:%02d:%02d %s", hour, minute, second, ampm.c_str());
+	Serial.println(timestring);
 }
 
 void WatchyMZA::uploadStepsAndClear() {
@@ -260,7 +271,7 @@ void WatchyMZA::uploadStepsAndClear() {
 			sensor.resetStepCounter();
 			oldStepCount = 0;
 		} else {
-			Serial.println("couldn't publish yesterday's step count!");
+			Serial.println("couldn't publish yesterday's step count!"); Serial.println(oldStepCount);
 		}
 	}
 }
@@ -313,11 +324,9 @@ void WatchyMZA::drawBattery(){
     }
 }
 
-extern RTC_DATA_ATTR weatherData currentWeather;
-
 void WatchyMZA::getWeatherData() {
 	if (connectWiFi()) { // Use Weather API for live data if WiFi is connected
-		Serial.println("grabbing weather data for " CITY_NAME);
+		Serial.print("grabbing weather data for " CITY_NAME "...");
 		HTTPClient http;
 		http.setConnectTimeout(3000); // 3 second max timeout
 		String weatherQueryURL = String(OPENWEATHERMAP_URL) + String(CITY_NAME) + String(",") + String(COUNTRY_CODE) + String("&units=") + String(TEMP_UNIT) + String("&appid=") + String(OPENWEATHERMAP_APIKEY);
@@ -329,9 +338,10 @@ void WatchyMZA::getWeatherData() {
 			currentWeather.temperature = int(responseObject["main"]["temp"]);
 			currentWeather.weatherConditionCode = int(responseObject["weather"][0]["id"]);
 		} else {
-			Serial.println("error fetching weather data");
+			Serial.println(" error fetching weather data");
 		}
 		http.end();
+		Serial.println(" done");
 		WiFi.mode(WIFI_OFF);
 		btStop();
 	} else { // No WiFi, use RTC Temperature
@@ -345,35 +355,196 @@ void WatchyMZA::getWeatherData() {
 }
 
 void WatchyMZA::drawWeather(){
-    int8_t temperature = currentWeather.temperature;
-    int16_t weatherConditionCode = currentWeather.weatherConditionCode;   
-    display.setFont(&DSEG7_Classic_Bold_25);
-    int16_t  x1, y1;
-    uint16_t w, h;
-    display.getTextBounds(String(temperature), 0, Y_POSITION_TEMPERATURE, &x1, &y1, &w, &h);
-    display.setCursor(155 - w, Y_POSITION_TEMPERATURE);
-    display.println(temperature);
-    display.drawBitmap(165, Y_POSITION_TEMPERATURE-TEMPERATURE_HEIGHT, strcmp(TEMP_UNIT, "metric") == 0 ? celsius : fahrenheit, 26, 20, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-    const unsigned char* weatherIcon;
-    //https://openweathermap.org/weather-conditions
-    if(weatherConditionCode > 801){//Cloudy
-    weatherIcon = cloudy;
-    }else if(weatherConditionCode == 801){//Few Clouds
-    weatherIcon = cloudsun;  
-    }else if(weatherConditionCode == 800){//Clear
-    weatherIcon = sunny;  
-    }else if(weatherConditionCode >=700){//Atmosphere
-    weatherIcon = cloudy; 
-    }else if(weatherConditionCode >=600){//Snow
-    weatherIcon = snow;
-    }else if(weatherConditionCode >=500){//Rain
-    weatherIcon = rain;  
-    }else if(weatherConditionCode >=300){//Drizzle
-    weatherIcon = rain;
-    }else if(weatherConditionCode >=200){//Thunderstorm
-    weatherIcon = rain; 
-    }else
-    return;
-    display.drawBitmap(X_POSITION_WEATHER, Y_POSITION_WEATHER, weatherIcon, WEATHER_ICON_WIDTH, WEATHER_ICON_HEIGHT, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+	int8_t temperature = currentWeather.temperature;
+	int16_t weatherConditionCode = currentWeather.weatherConditionCode;
+	display.setFont(&DSEG7_Classic_Bold_25);
+	int16_t  x1, y1;
+	uint16_t w, h;
+	display.getTextBounds(String(temperature), 0, Y_POSITION_TEMPERATURE, &x1, &y1, &w, &h);
+	display.setCursor(155 - w, Y_POSITION_TEMPERATURE);
+	display.println(temperature);
+	display.drawBitmap(165, Y_POSITION_TEMPERATURE-TEMPERATURE_HEIGHT, strcmp(TEMP_UNIT, "metric") == 0 ? celsius : fahrenheit, 26, 20, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+	const unsigned char* weatherIcon;
+	//https://openweathermap.org/weather-conditions
+	if (weatherConditionCode > 801) {//Cloudy
+		weatherIcon = cloudy;
+	} else if (weatherConditionCode == 801) {//Few Clouds
+		weatherIcon = cloudsun;
+	} else if (weatherConditionCode == 800) {//Clear
+		weatherIcon = sunny;
+	} else if (weatherConditionCode >=700) {//Atmosphere
+		weatherIcon = cloudy;
+	} else if (weatherConditionCode >=600) {//Snow
+		weatherIcon = snow;
+	} else if (weatherConditionCode >=500) {//Rain
+		weatherIcon = rain;
+	} else if (weatherConditionCode >=300) {//Drizzle
+		weatherIcon = rain;
+	} else if (weatherConditionCode >=200) {//Thunderstorm
+		weatherIcon = rain;
+	} else {
+		return;
+	}
+	display.drawBitmap(X_POSITION_WEATHER, Y_POSITION_WEATHER, weatherIcon, WEATHER_ICON_WIDTH, WEATHER_ICON_HEIGHT, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+}
+
+void WatchyMZA::init(String datetime) {
+	esp_sleep_wakeup_cause_t wakeup_reason;
+	wakeup_reason = esp_sleep_get_wakeup_cause(); // get wake up reason
+	Wire.begin(SDA, SCL); // init i2c
+	switch (wakeup_reason) {
+		#ifdef ESP_RTC
+		case ESP_SLEEP_WAKEUP_TIMER: // ESP Internal RTC
+			if(guiState == WATCHFACE_STATE){
+				RTC.read(currentTime);
+				currentTime.Minute++;
+				tmElements_t tm;
+				tm.Month = currentTime.Month;
+				tm.Day = currentTime.Day;
+				tm.Year = currentTime.Year;
+				tm.Hour = currentTime.Hour;
+				tm.Minute = currentTime.Minute;
+				tm.Second = 0;
+				time_t t = makeTime(tm);
+				RTC.set(t);
+				RTC.read(currentTime);
+				showWatchFace(true); // partial updates on tick
+			}
+			break;
+		#endif
+		case ESP_SLEEP_WAKEUP_EXT0: // RTC Alarm
+			RTC.alarm(ALARM_2); // resets the alarm flag in the RTC
+			if(guiState == WATCHFACE_STATE){
+				RTC.read(currentTime);
+//				Serial.println("partial update");
+				showWatchFace(true); // partial updates on tick
+			}
+			break;
+		case ESP_SLEEP_WAKEUP_EXT1: // button Press
+			handleButtonPress();
+			break;
+		default: //reset
+			#ifndef ESP_RTC
+			_rtcConfig(datetime);
+			#endif
+			_bmaConfig();
+//			Serial.println("full update");
+			showWatchFace(false); //full update on reset
+			break;
+	}
+	deepSleep();
+}
+
+uint16_t WatchyMZA::_readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len) {
+    Wire.beginTransmission(address);
+    Wire.write(reg);
+    Wire.endTransmission();
+    Wire.requestFrom((uint8_t)address, (uint8_t)len);
+    uint8_t i = 0;
+    while (Wire.available()) {
+        data[i++] = Wire.read();
+    }
+    return 0;
+}
+
+uint16_t WatchyMZA::_writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len) {
+    Wire.beginTransmission(address);
+    Wire.write(reg);
+    Wire.write(data, len);
+    return (0 !=  Wire.endTransmission());
+}
+
+void WatchyMZA::_bmaConfig() {
+	if (sensor.begin(_readRegister, _writeRegister, delay) == false) {
+		return; //fail to init BMA
+	}
+	// Accel parameter structure
+	Acfg cfg;
+	/*!
+		Output data rate in Hz, Optional parameters:
+			- BMA4_OUTPUT_DATA_RATE_0_78HZ
+			- BMA4_OUTPUT_DATA_RATE_1_56HZ
+			- BMA4_OUTPUT_DATA_RATE_3_12HZ
+			- BMA4_OUTPUT_DATA_RATE_6_25HZ
+			- BMA4_OUTPUT_DATA_RATE_12_5HZ
+			- BMA4_OUTPUT_DATA_RATE_25HZ
+			- BMA4_OUTPUT_DATA_RATE_50HZ
+			- BMA4_OUTPUT_DATA_RATE_100HZ
+			- BMA4_OUTPUT_DATA_RATE_200HZ
+			- BMA4_OUTPUT_DATA_RATE_400HZ
+			- BMA4_OUTPUT_DATA_RATE_800HZ
+			- BMA4_OUTPUT_DATA_RATE_1600HZ
+	*/
+	cfg.odr = BMA4_OUTPUT_DATA_RATE_100HZ;
+	/*!
+		G-range, Optional parameters:
+			- BMA4_ACCEL_RANGE_2G
+			- BMA4_ACCEL_RANGE_4G
+			- BMA4_ACCEL_RANGE_8G
+			- BMA4_ACCEL_RANGE_16G
+	*/
+	cfg.range = BMA4_ACCEL_RANGE_2G;
+	/*!
+		Bandwidth parameter, determines filter configuration, Optional parameters:
+			- BMA4_ACCEL_OSR4_AVG1
+			- BMA4_ACCEL_OSR2_AVG2
+			- BMA4_ACCEL_NORMAL_AVG4
+			- BMA4_ACCEL_CIC_AVG8
+			- BMA4_ACCEL_RES_AVG16
+			- BMA4_ACCEL_RES_AVG32
+			- BMA4_ACCEL_RES_AVG64
+			- BMA4_ACCEL_RES_AVG128
+	*/
+	cfg.bandwidth = BMA4_ACCEL_NORMAL_AVG4;
+	/*! Filter performance mode , Optional parameters:
+		- BMA4_CIC_AVG_MODE
+		- BMA4_CONTINUOUS_MODE
+	*/
+	cfg.perf_mode = BMA4_CONTINUOUS_MODE;
+	// Configure the BMA423 accelerometer
+	sensor.setAccelConfig(cfg);
+	// Enable BMA423 accelerometer
+	// Warning : Need to use feature, you must first enable the accelerometer
+	// Warning : Need to use feature, you must first enable the accelerometer
+	sensor.enableAccel();
+	struct bma4_int_pin_config config ;
+	config.edge_ctrl = BMA4_LEVEL_TRIGGER;
+	config.lvl = BMA4_ACTIVE_HIGH;
+	config.od = BMA4_PUSH_PULL;
+	config.output_en = BMA4_OUTPUT_ENABLE;
+	config.input_en = BMA4_INPUT_DISABLE;
+	// The correct trigger interrupt needs to be configured as needed
+	sensor.setINTPinConfig(config, BMA4_INTR1_MAP);
+	struct bma423_axes_remap remap_data;
+	remap_data.x_axis = 1;
+	remap_data.x_axis_sign = 0xFF;
+	remap_data.y_axis = 0;
+	remap_data.y_axis_sign = 0xFF;
+	remap_data.z_axis = 2;
+	remap_data.z_axis_sign = 0xFF;
+	// Need to raise the wrist function, need to set the correct axis
+	sensor.setRemapAxes(&remap_data);
+	// Enable BMA423 isStepCounter feature
+	sensor.enableFeature(BMA423_STEP_CNTR, true);
+	// Enable BMA423 isTilt feature
+	sensor.enableFeature(BMA423_TILT, true);
+	// Enable BMA423 isDoubleClick feature
+	sensor.enableFeature(BMA423_WAKEUP, true);
+	// Reset steps
+//	sensor.resetStepCounter();
+	// Turn on feature interrupt
+	sensor.enableStepCountInterrupt();
+	sensor.enableTiltInterrupt();
+	// It corresponds to isDoubleClick interrupt
+	sensor.enableWakeupInterrupt();
+}
+
+void WatchyMZA::_rtcConfig(String datetime) {
+    //https://github.com/JChristensen/DS3232RTC
+    RTC.squareWave(SQWAVE_NONE); //disable square wave output
+    //RTC.set(compileTime()); //set RTC time to compile time
+    RTC.setAlarm(ALM2_EVERY_MINUTE, 0, 0, 0, 0); //alarm wakes up Watchy every minute
+    RTC.alarmInterrupt(ALARM_2, true); //enable alarm interrupt
+    RTC.read(currentTime);
 }
 
