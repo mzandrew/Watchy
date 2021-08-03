@@ -101,7 +101,7 @@ void WatchyMZA::setTimeViaNTP() {
 			Serial.print("setting time to "); Serial.println(timestring);
 			const time_t fudge(3); // fudge factor to allow for upload time, etc. (seconds, YMMV)
 			epoch += fudge;
-			delay(600); // extra fudge
+			delay(300); // extra fudge
 			RTC.set(epoch); // set time on RTC
 		} else {
 			Serial.println("didn't get a response");
@@ -210,6 +210,18 @@ void WatchyMZA::drawWatchFace(){
 	drawTime();
 	drawDayName();
 	drawBattery();
+//	display.drawBitmap(X_POSITION_WIFI, Y_POSITION_WIFI, WIFI_CONFIGURED ? wifi : wifioff, 26, 18, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+//	if(BLE_CONFIGURED){
+//		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
+//	}
+#ifdef RESETSTEPSEVERYDAY
+	if (currentTime.Hour==1 && currentTime.Minute==0) {
+//	if (currentTime.Minute%10==0) {
+		oldStepCount = sensor.getCounter();
+	}
+	uploadStepsAndClear();
+#endif
+	drawSteps();
 	if (weatherIntervalCounter >= WEATHER_UPDATE_INTERVAL) {
 		getWeatherData();
 		weatherIntervalCounter = 0;
@@ -217,20 +229,7 @@ void WatchyMZA::drawWatchFace(){
 		weatherIntervalCounter++;
 	}
 	drawWeather();
-//	display.drawBitmap(X_POSITION_WIFI, Y_POSITION_WIFI, WIFI_CONFIGURED ? wifi : wifioff, 26, 18, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-//	if(BLE_CONFIGURED){
-//		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
-//	}
-#ifdef RESETSTEPSEVERYDAY
-	if (currentTime.Hour==0 && currentTime.Minute==0) {
-//	if (currentTime.Minute%10==0) {
-		oldStepCount = sensor.getCounter();
-//		Serial.print("current old step count: "); Serial.println(oldStepCount);
-	}
-	uploadStepsAndClear();
-#endif
-	drawSteps();
-	if (currentTime.Hour==0 && currentTime.Minute==1) {
+	if (currentTime.Hour==1 && currentTime.Minute==1) {
 //	if (currentTime.Minute==10) {
 		setTimeViaNTP();
 	}
@@ -262,6 +261,7 @@ void WatchyMZA::drawTime(){
 
 void WatchyMZA::uploadStepsAndClear() {
 	if (oldStepCount) {
+		Serial.print("current old step count: "); Serial.println(oldStepCount);
 		if (connectWiFi() && MQTT_connect()) {
 			feed.publish(oldStepCount); // upload this somewhere
 			mqtt.disconnect();
