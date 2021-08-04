@@ -17,6 +17,7 @@ class WatchyMZA : public Watchy {
 		void drawWeather();
 		void drawBattery();
 		int connectWiFi();
+		void disconnectWiFi();
 		int MQTT_connect();
 		void uploadStepsAndClear();
 		void setTimeViaNTP();
