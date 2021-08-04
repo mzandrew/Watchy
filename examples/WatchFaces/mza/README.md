@@ -9,3 +9,16 @@ To upload yesterday's step count just before clearing it, define the following i
 
 Sets time via NTP every morning at 1 minute past midnight.  Put your `UTC_OFFSET_HOURS` (a signed quantity) in `secrets.h`
 
+platformio setup:
+sudo pip install -U platformio
+platformio lib --global install 6864 1092
+
+platformio compile:
+pio run
+
+platformio compile & program:
+pio run -t upload
+
+platformio monitor:
+pio device monitor
+
