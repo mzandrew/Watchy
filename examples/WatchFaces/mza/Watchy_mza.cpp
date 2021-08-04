@@ -1,4 +1,4 @@
-// last updated 2021-07-28 by mza
+// last updated 2021-08-04 by mza
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
 #include "DSEG14_Classic_25.h"
@@ -16,9 +16,9 @@
 #define DARKMODE true
 #define TWELVEHOURMODE
 #define RESETSTEPSEVERYDAY
-
-#define DISPLAY_HEIGHT (200)
-#define DISPLAY_WIDTH  (200)
+//#define DEBUG
+#define TIME_SET_DELAY_S (2) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
+#define TIME_SET_DELAY_MS (1250) // extra negative fudge factor to tweak time (milliseconds, should be at least 1000 to wait for the ntp packet response)
 
 #define BATTERY_SEGMENT_WIDTH   (7)
 #define BATTERY_SEGMENT_HEIGHT  (11)
@@ -54,6 +54,7 @@
 extern RTC_DATA_ATTR weatherData currentWeather;
 extern RTC_DATA_ATTR int weatherIntervalCounter;
 RTC_DATA_ATTR uint32_t oldStepCount = 0;
+RTC_DATA_ATTR uint32_t reallyOldStepCount = 0;
 
 const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[ NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
@@ -82,7 +83,7 @@ void WatchyMZA::setTimeViaNTP() {
 		IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
 		UDP.begin(localPort);
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
-		delay(1000);
+		delay(TIME_SET_DELAY_MS);
 		if ( UDP.parsePacket() ) {
 			UDP.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
 			unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
@@ -97,11 +98,10 @@ void WatchyMZA::setTimeViaNTP() {
 	//		Serial.print("UTC time is "); Serial.println(timestring);
 			epoch += (UTC_OFFSET_HOURS) * 3600; // UTC_OFFSET_HOURS is a signed quantity
 	//		Serial.print("epoch time (local) = "); Serial.println(epoch);
+			const time_t fudge(TIME_SET_DELAY_S);
+			epoch += fudge;
 			sprintf(timestring, "%02d:%02d:%02d", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
 			Serial.print("setting time to "); Serial.println(timestring);
-			const time_t fudge(3); // fudge factor to allow for upload time, etc. (seconds, YMMV)
-			epoch += fudge;
-			delay(300); // extra fudge
 			RTC.set(epoch); // set time on RTC
 		} else {
 			Serial.println("didn't get a response");
@@ -163,12 +163,11 @@ const char* adafruitio_root_ca = \
 
 int WatchyMZA::connectWiFi() {
 	Serial.print("Connecting to " WLAN_SSID "...");
-//	delay(1000);
 	WiFi.begin(WLAN_SSID, WLAN_PASS);
-	delay(500);
-	uint8_t retries = 12;
+#define MAX_RETRIES (6)
+	uint8_t retries = MAX_RETRIES;
 	while (WiFi.status() != WL_CONNECTED) {
-		delay(500);
+		delay(1000);
 		Serial.print(".");
 		retries--;
 		if (retries == 0) { Serial.println("  failed"); return 0; }
@@ -176,7 +175,8 @@ int WatchyMZA::connectWiFi() {
 	if (WiFi.status()==WL_CONNECTED) {
 		Serial.print("  IP address: "); Serial.println(WiFi.localIP());
 		client.setCACert(adafruitio_root_ca); // Set Adafruit IO's root CA
-		return 1;
+		Serial.print("wifi connection took "); Serial.print(MAX_RETRIES - retries); Serial.println(" seconds");
+		return MAX_RETRIES - retries;
 	} else {
 		return 0;
 	}
@@ -215,11 +215,29 @@ void WatchyMZA::drawWatchFace(){
 //		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	}
 #ifdef RESETSTEPSEVERYDAY
-	if (currentTime.Hour==1 && currentTime.Minute==0) {
-//	if (currentTime.Minute%10==0) {
-		oldStepCount = sensor.getCounter();
+#ifdef DEBUG
+	if (currentTime.Minute==58) {
+#else
+	if (currentTime.Hour==11 && currentTime.Minute==58) {
+#endif
+		if (oldStepCount) {
+			uploadStepsAndClear();
+		}
 	}
-	uploadStepsAndClear();
+#ifdef DEBUG
+	if (currentTime.Minute==59) {
+#else
+	if (currentTime.Hour==11 && currentTime.Minute==59) {
+#endif
+		if (oldStepCount) {
+			reallyOldStepCount += oldStepCount;
+			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
+		}
+		oldStepCount = sensor.getCounter();
+		if (oldStepCount) {
+			uploadStepsAndClear();
+		}
+	}
 #endif
 	drawSteps();
 	if (weatherIntervalCounter >= WEATHER_UPDATE_INTERVAL) {
@@ -229,8 +247,12 @@ void WatchyMZA::drawWatchFace(){
 		weatherIntervalCounter++;
 	}
 	drawWeather();
-	if (currentTime.Hour==1 && currentTime.Minute==1) {
-//	if (currentTime.Minute==10) {
+#ifdef DEBUG
+	if (currentTime.Minute==57) {
+	//if (currentTime.Minute%10==0) {
+#else
+	if (currentTime.Hour==11 && currentTime.Minute==57) {
+#endif
 		setTimeViaNTP();
 	}
 }
@@ -337,11 +359,11 @@ void WatchyMZA::getWeatherData() {
 			JSONVar responseObject = JSON.parse(payload);
 			currentWeather.temperature = int(responseObject["main"]["temp"]);
 			currentWeather.weatherConditionCode = int(responseObject["weather"][0]["id"]);
+			Serial.println(" done");
 		} else {
 			Serial.println(" error fetching weather data");
 		}
 		http.end();
-		Serial.println(" done");
 		WiFi.mode(WIFI_OFF);
 		btStop();
 	} else { // No WiFi, use RTC Temperature
