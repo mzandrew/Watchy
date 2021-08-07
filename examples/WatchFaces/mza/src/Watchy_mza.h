@@ -19,7 +19,7 @@ class WatchyMZA : public Watchy {
 		int connectWiFi();
 		void disconnectWiFi();
 		int MQTT_connect();
-		void uploadStepsAndClear();
+		uint32_t uploadSteps(uint32_t);
 		void setTimeViaNTP();
 		void getWeatherData();
 		void init(String = "");

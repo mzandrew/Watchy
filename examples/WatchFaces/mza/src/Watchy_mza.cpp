@@ -9,14 +9,14 @@
 #include <WiFiUdp.h>
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
-#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
+#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, MY_CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
 #define AIO_SERVER     "io.adafruit.com"
 #define AIO_SERVERPORT 8883
 
 #define DARKMODE true
 #define TWELVEHOURMODE
 #define RESETSTEPSEVERYDAY
-#define DEBUG
+//#define DEBUG
 #define TIME_SET_DELAY_S (3) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
 #define TIME_SET_DELAY_MS (1850) // extra negative fudge factor to tweak time (milliseconds, should be at least 1000 to wait for the ntp packet response)
 
@@ -62,7 +62,7 @@ const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of th
 byte packetBuffer[ NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
 WiFiUDP UDP;
 
-unsigned long sendNTPpacket(IPAddress &address) {
+void sendNTPpacket(IPAddress &address) {
   memset(packetBuffer, 0, NTP_PACKET_SIZE);
   packetBuffer[0] = 0b11100011; // LI, Version, Mode
   packetBuffer[1] = 0;          // Stratum, or type of clock
@@ -240,7 +240,7 @@ void WatchyMZA::drawWatchFace(){
 	if (currentTime.Hour==11 && currentTime.Minute==58) {
 #endif
 		if (oldStepCount) {
-			uploadStepsAndClear();
+			oldStepCount = uploadSteps(oldStepCount);
 		}
 	}
 #ifdef DEBUG
@@ -251,11 +251,16 @@ void WatchyMZA::drawWatchFace(){
 #endif
 		if (oldStepCount) {
 			reallyOldStepCount += oldStepCount;
+		}
+		if (reallyOldStepCount) {
 			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
 		}
 		oldStepCount = sensor.getCounter();
 		if (oldStepCount) {
-			uploadStepsAndClear();
+			oldStepCount = uploadSteps(oldStepCount);
+		}
+		if (oldStepCount==0) {
+			sensor.resetStepCounter();
 		}
 	}
 #endif
@@ -288,7 +293,7 @@ void WatchyMZA::drawTime(){
 	uint8_t minute = currentTime.Minute;
 	uint8_t hour = currentTime.Hour;
 	uint8_t second = currentTime.Second;
-	char timestring[10];
+	char timestring[12];
 #ifdef TWELVEHOURMODE
 	String ampm = int(hour/12) ? "pm" : "am";
 //  0,1,2,3,4,5,6,7,8,9,10,11  12,13,14,15,16,17,18,19,20,21,22,23 24-hour-mode
@@ -303,20 +308,20 @@ void WatchyMZA::drawTime(){
 	Serial.println(timestring);
 }
 
-void WatchyMZA::uploadStepsAndClear() {
-	if (oldStepCount) {
-		Serial.print("current old step count: "); Serial.println(oldStepCount);
+uint32_t WatchyMZA::uploadSteps(uint32_t steps) {
+	if (steps) {
+		Serial.print("current step count: "); Serial.println(steps);
 		if (connectWiFi() && MQTT_connect()) {
-			feed.publish(oldStepCount); // upload this somewhere
+			feed.publish(steps); // upload this somewhere
 			mqtt.disconnect();
 			disconnectWiFi();
-			Serial.print("published yesterday's step count: "); Serial.println(oldStepCount);
-			sensor.resetStepCounter();
-			oldStepCount = 0;
+			Serial.print("published step count: "); Serial.println(steps);
+			steps = 0;
 		} else {
-			Serial.println("couldn't publish yesterday's step count!"); Serial.println(oldStepCount);
+			Serial.println("couldn't publish step count! "); Serial.println(steps);
 		}
 	}
+	return steps;
 }
 
 void WatchyMZA::drawDayName(){
@@ -369,10 +374,10 @@ void WatchyMZA::drawBattery(){
 
 void WatchyMZA::getWeatherData() {
 	if (connectWiFi()) { // Use Weather API for live data if WiFi is connected
-		Serial.print("grabbing weather data for " CITY_NAME "...");
+		Serial.print("grabbing weather data for " MY_CITY_NAME "...");
 		HTTPClient http;
 		http.setConnectTimeout(3000); // 3 second max timeout
-		String weatherQueryURL = String(OPENWEATHERMAP_URL) + String(CITY_NAME) + String(",") + String(COUNTRY_CODE) + String("&units=") + String(TEMP_UNIT) + String("&appid=") + String(OPENWEATHERMAP_APIKEY);
+		String weatherQueryURL = String(OPENWEATHERMAP_URL) + String(MY_CITY_NAME) + String(",") + String(COUNTRY_CODE) + String("&units=") + String(TEMP_UNIT) + String("&appid=") + String(OPENWEATHERMAP_APIKEY);
 		http.begin(weatherQueryURL.c_str());
 		int httpResponseCode = http.GET();
 		if (httpResponseCode == 200) {
