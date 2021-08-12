@@ -1,4 +1,4 @@
-// last updated 2021-08-04 by mza
+// last updated 2021-08-11 by mza
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
 #include "DSEG14_Classic_25.h"
@@ -239,8 +239,11 @@ void WatchyMZA::drawWatchFace(){
 #else
 	if (currentTime.Hour==11 && currentTime.Minute==58) {
 #endif
-		if (oldStepCount) {
-			oldStepCount = uploadSteps(oldStepCount);
+		if (reallyOldStepCount) {
+			reallyOldStepCount = uploadSteps(reallyOldStepCount);
+		}
+		if (reallyOldStepCount) {
+			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
 		}
 	}
 #ifdef DEBUG
@@ -249,18 +252,13 @@ void WatchyMZA::drawWatchFace(){
 #else
 	if (currentTime.Hour==11 && currentTime.Minute==59) {
 #endif
-		if (oldStepCount) {
-			reallyOldStepCount += oldStepCount;
-		}
-		if (reallyOldStepCount) {
-			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
-		}
 		oldStepCount = sensor.getCounter();
 		if (oldStepCount) {
-			oldStepCount = uploadSteps(oldStepCount);
-		}
-		if (oldStepCount==0) {
 			sensor.resetStepCounter();
+			oldStepCount = uploadSteps(oldStepCount);
+			if (oldStepCount) {
+				reallyOldStepCount += oldStepCount;
+			}
 		}
 	}
 #endif
