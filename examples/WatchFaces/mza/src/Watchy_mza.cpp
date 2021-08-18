@@ -16,6 +16,7 @@
 #define DARKMODE true
 #define TWELVEHOURMODE
 #define RESETSTEPSEVERYDAY
+//#define WEATHER
 //#define DEBUG
 #define TIME_SET_DELAY_S (3) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
 #define TIME_SET_DELAY_MS (1850) // extra negative fudge factor to tweak time (milliseconds, should be at least 1000 to wait for the ntp packet response)
@@ -237,7 +238,7 @@ void WatchyMZA::drawWatchFace(){
 	if (currentTime.Minute==58) {
 //	if (currentTime.Minute%10==1) {
 #else
-	if (currentTime.Hour==11 && currentTime.Minute==58) {
+	if (currentTime.Hour==23 && currentTime.Minute==58) {
 #endif
 		if (reallyOldStepCount) {
 			reallyOldStepCount = uploadSteps(reallyOldStepCount);
@@ -250,7 +251,7 @@ void WatchyMZA::drawWatchFace(){
 	if (currentTime.Minute==59) {
 //	if (currentTime.Minute%10==2) {
 #else
-	if (currentTime.Hour==11 && currentTime.Minute==59) {
+	if (currentTime.Hour==23 && currentTime.Minute==59) {
 #endif
 		oldStepCount = sensor.getCounter();
 		if (oldStepCount) {
@@ -263,18 +264,20 @@ void WatchyMZA::drawWatchFace(){
 	}
 #endif
 	drawSteps();
-	if (weatherIntervalCounter >= WEATHER_UPDATE_INTERVAL) {
-		getWeatherData();
-		weatherIntervalCounter = 0;
-	} else {
-		weatherIntervalCounter++;
-	}
-	drawWeather();
+	#ifdef WEATHER
+		if (weatherIntervalCounter >= WEATHER_UPDATE_INTERVAL) {
+			getWeatherData();
+			weatherIntervalCounter = 0;
+		} else {
+			weatherIntervalCounter++;
+		}
+		drawWeather();
+	#endif
 #ifdef DEBUG
 	if (currentTime.Minute==57) {
 //	if (currentTime.Minute%10==0) {
 #else
-	if (currentTime.Hour==11 && currentTime.Minute==57) {
+	if (currentTime.Hour==23 && currentTime.Minute==57) {
 #endif
 		setTimeViaNTP();
 	}
