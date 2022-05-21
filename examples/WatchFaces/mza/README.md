@@ -12,7 +12,7 @@ secrets.h should also contain `MY_CITY_NAME` and `TEMP_UNIT` to get appropriate 
 Sets time via NTP every morning at 1 minute past midnight.  Put your `UTC_OFFSET_HOURS` (a signed quantity) in `secrets.h`
 
 platformio setup:
-sudo pip install -U platformio
+pip install -U platformio
 platformio lib --global install 6864 1092
 
 platformio compile:
@@ -24,6 +24,6 @@ platformio compile & program:
 pio run -e esp32dev -t upload
 pio run -e debug -t upload
 
-platformio monitor:
+platformio serial monitor:
 pio device monitor
 
