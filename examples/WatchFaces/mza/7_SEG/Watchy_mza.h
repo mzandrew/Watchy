@@ -5,14 +5,14 @@
 //#define ARDUINO_WATCHY_V15
 //#define ARDUINO_WATCHY_V20
 
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
-#include "Watchy.h"
+#include <Adafruit_MQTT.h>
+#include <Adafruit_MQTT_Client.h>
+#include <Watchy.h>
 #include "icons.h"
 
 class WatchyMZA : public Watchy {
 	public:
-		WatchyMZA();
+		using Watchy::Watchy;
 		void drawWatchFace();
 		void drawTime();
 		void drawDate();

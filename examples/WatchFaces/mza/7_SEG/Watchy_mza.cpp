@@ -1,4 +1,4 @@
-// last updated 2022-06-03 by mza
+// last updated 2022-06-04 by mza
 
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
@@ -227,8 +227,6 @@ int WatchyMZA::MQTT_connect() {
 	Serial.println("Connected!");
 	return 1;
 }
-
-WatchyMZA::WatchyMZA(){} //constructor
 
 void WatchyMZA::drawWatchFace(){
 	display.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
