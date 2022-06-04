@@ -196,9 +196,5 @@ const GFXglyph DSEG7_Classic_Regular_15Glyphs[] PROGMEM = {
     {  1265,   5,  11,   6,    1,  -11 } // '}'
 };
 const GFXfont DSEG7_Classic_Regular_15 PROGMEM = {
-<<<<<<< HEAD:examples/WatchFaces/mza/DSEG7_Classic_Regular_15.h
-(uint8_t  *)DSEG7_Classic_Regular_15Bitmaps,(GFXglyph *)DSEG7_Classic_Regular_15Glyphs,0x20, 0x7E, 17};
-=======
 (uint8_t  *)DSEG7_Classic_Regular_15Bitmaps,(GFXglyph *)DSEG7_Classic_Regular_15Glyphs,0x20, 0x7E, 17};
 
->>>>>>> applies all of my changes to a copy of 7_SEG:examples/WatchFaces/mza/7_SEG/DSEG7_Classic_Regular_15.h
