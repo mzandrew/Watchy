@@ -482,8 +482,11 @@ void WatchyMZA::init(String datetime) {
 			break;
 		default: //reset
 			Serial.println("reset");
+			#ifdef DEBUG
+				Serial.println("debug mode");
+			#endif
 			#ifndef ESP_RTC
-			RTC.config(datetime);
+				RTC.config(datetime);
 			#endif
 			_bmaConfig();
 //			Serial.println("full update");
