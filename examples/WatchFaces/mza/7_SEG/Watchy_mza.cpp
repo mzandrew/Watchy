@@ -1,4 +1,4 @@
-// last updated 2022-05-11 by mza
+// last updated 2022-06-03 by mza
 
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
@@ -108,7 +108,14 @@ void WatchyMZA::setTimeViaNTP() {
 			epoch += fudge;
 			sprintf(timestring, "%02ld:%02ld:%02ld", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
 			Serial.print("setting time to "); Serial.println(timestring);
-			RTC.set(epoch); // set time on RTC
+			tmElements_t epoch_tm;
+			breakTime(epoch, epoch_tm);
+			// tmElements_t tm = localtime(&epoch); // error: conversion from 'tm*' to non-scalar type 'tmElements_t' requested
+			//tm *epoch_tm = localtime(&epoch);
+			// tm epoch_tm = localtime(epoch); // error: invalid conversion from 'time_t' {aka 'long int'} to 'const time_t*' {aka 'const long int*'} [-fpermissive]
+			// tm epoch_tm = localtime(&epoch); // error: conversion from 'tm*' to non-scalar type 'tm' requested
+			// error: no matching function for call to 'WatchyRTC::set(tm*&)'
+			RTC.set(epoch_tm); // set time on RTC
 		} else {
 			Serial.println("didn't get a response");
 		}
@@ -454,15 +461,15 @@ void WatchyMZA::init(String datetime) {
 				tm.Hour = currentTime.Hour;
 				tm.Minute = currentTime.Minute;
 				tm.Second = 0;
-				time_t t = makeTime(tm);
-				RTC.set(t);
+				//time_t t = makeTime(tm); // Watchy v1.2.8 and up does this step for us
+				RTC.set(tm);
 				RTC.read(currentTime);
 				showWatchFace(true); // partial updates on tick
 			}
 			break;
 		#endif
 		case ESP_SLEEP_WAKEUP_EXT0: // RTC Alarm
-			RTC.alarm(ALARM_2); // resets the alarm flag in the RTC
+			RTC.clearAlarm(); // resets the alarm flag in the RTC
 			if(guiState == WATCHFACE_STATE){
 				RTC.read(currentTime);
 //				Serial.println("partial update");
@@ -474,7 +481,7 @@ void WatchyMZA::init(String datetime) {
 			break;
 		default: //reset
 			#ifndef ESP_RTC
-			_rtcConfig(datetime);
+			RTC.config(datetime);
 			#endif
 			_bmaConfig();
 //			Serial.println("full update");
@@ -586,14 +593,5 @@ void WatchyMZA::_bmaConfig() {
 	sensor.enableTiltInterrupt();
 	// It corresponds to isDoubleClick interrupt
 	sensor.enableWakeupInterrupt();
-}
-
-void WatchyMZA::_rtcConfig(String datetime) {
-    //https://github.com/JChristensen/DS3232RTC
-    RTC.squareWave(SQWAVE_NONE); //disable square wave output
-    //RTC.set(compileTime()); //set RTC time to compile time
-    RTC.setAlarm(ALM2_EVERY_MINUTE, 0, 0, 0, 0); //alarm wakes up Watchy every minute
-    RTC.alarmInterrupt(ALARM_2, true); //enable alarm interrupt
-    RTC.read(currentTime);
 }
 
