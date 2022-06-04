@@ -481,6 +481,7 @@ void WatchyMZA::init(String datetime) {
 			handleButtonPress();
 			break;
 		default: //reset
+			Serial.println("");
 			Serial.println("reset");
 			#ifdef DEBUG
 				Serial.println("debug mode");
