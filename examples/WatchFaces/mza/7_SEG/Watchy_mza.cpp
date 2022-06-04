@@ -60,12 +60,12 @@ RTC_DATA_ATTR uint32_t reallyOldStepCount = 0;
 
 RTC_DATA_ATTR bool wifi_active = false;
 
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-byte packetBuffer[ NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
+const int MY_NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
+byte packetBuffer[ MY_NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
 WiFiUDP UDP;
 
 void sendNTPpacket(IPAddress &address) {
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  memset(packetBuffer, 0, MY_NTP_PACKET_SIZE);
   packetBuffer[0] = 0b11100011; // LI, Version, Mode
   packetBuffer[1] = 0;          // Stratum, or type of clock
   packetBuffer[2] = 6;          // Polling Interval
@@ -76,7 +76,7 @@ void sendNTPpacket(IPAddress &address) {
   packetBuffer[14]  = 49;
   packetBuffer[15]  = 52;
   UDP.beginPacket(address, 123); // NTP requests are to port 123
-  UDP.write(packetBuffer, NTP_PACKET_SIZE);
+  UDP.write(packetBuffer, MY_NTP_PACKET_SIZE);
   UDP.endPacket();
 }
 
@@ -89,7 +89,7 @@ void WatchyMZA::setTimeViaNTP() {
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
 		delay(TIME_SET_DELAY_MS);
 		if ( UDP.parsePacket() ) {
-			UDP.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+			UDP.read(packetBuffer, MY_NTP_PACKET_SIZE); // read the packet into the buffer
 			unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
 			unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
 			unsigned long secsSince1900 = highWord << 16 | lowWord;
