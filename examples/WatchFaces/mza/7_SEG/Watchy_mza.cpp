@@ -1,5 +1,6 @@
 // last updated 2022-06-04 by mza
 
+#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, MY_CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
 #include "Watchy_mza.h"
 #include "DSEG7_Classic_Bold_22.h"
 #include "DSEG14_Classic_25.h"
@@ -8,9 +9,8 @@
 #include <WiFi.h>
 #include "WiFiClientSecure.h"
 #include <WiFiUdp.h>
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
-#include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, MY_CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
+#include <Adafruit_MQTT.h>
+#include <Adafruit_MQTT_Client.h>
 #define AIO_SERVER     "io.adafruit.com"
 #define AIO_SERVERPORT 8883
 

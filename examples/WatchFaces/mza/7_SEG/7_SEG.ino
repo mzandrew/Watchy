@@ -1,4 +1,5 @@
 //#include "Watchy_7_SEG.h"
+#include "secrets.h"
 #include "Watchy_mza.h"
 #include "settings.h"
 
