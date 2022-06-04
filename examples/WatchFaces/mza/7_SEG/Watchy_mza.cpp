@@ -451,6 +451,7 @@ void WatchyMZA::init(String datetime) {
 	switch (wakeup_reason) {
 		#ifdef ESP_RTC
 		case ESP_SLEEP_WAKEUP_TIMER: // ESP Internal RTC
+			Serial.println("ESP RTC");
 			if(guiState == WATCHFACE_STATE){
 				RTC.read(currentTime);
 				currentTime.Minute++;
@@ -469,6 +470,7 @@ void WatchyMZA::init(String datetime) {
 			break;
 		#endif
 		case ESP_SLEEP_WAKEUP_EXT0: // RTC Alarm
+			Serial.println("RTC alarm");
 			RTC.clearAlarm(); // resets the alarm flag in the RTC
 			if(guiState == WATCHFACE_STATE){
 				RTC.read(currentTime);
@@ -477,9 +479,11 @@ void WatchyMZA::init(String datetime) {
 			}
 			break;
 		case ESP_SLEEP_WAKEUP_EXT1: // button Press
+			Serial.println("button press");
 			handleButtonPress();
 			break;
 		default: //reset
+			Serial.println("reset");
 			#ifndef ESP_RTC
 			RTC.config(datetime);
 			#endif
