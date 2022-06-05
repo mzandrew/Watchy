@@ -237,7 +237,7 @@ int WatchyMZA::MQTT_connect() {
 void WatchyMZA::showWatchFace(bool partialRefresh) {
 	display.setFullWindow();
 	drawWatchFace();
-	display.display(partialRefresh);
+//	display.display(partialRefresh);
 }
 
 void WatchyMZA::drawWatchFace(){
