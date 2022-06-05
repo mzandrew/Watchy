@@ -237,7 +237,7 @@ int WatchyMZA::MQTT_connect() {
 void WatchyMZA::showWatchFace(bool partialRefresh) {
 	display.setFullWindow();
 	drawWatchFace();
-//	display.display(partialRefresh);
+	display.display(partialRefresh);
 }
 
 void WatchyMZA::drawWatchFace(){
@@ -458,31 +458,15 @@ void WatchyMZA::drawWeather(){
 	display.drawBitmap(X_POSITION_WEATHER, Y_POSITION_WEATHER, weatherIcon, WEATHER_ICON_WIDTH, WEATHER_ICON_HEIGHT, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 }
 
+extern bool displayFullInit;
 void WatchyMZA::init(String datetime) {
 	esp_sleep_wakeup_cause_t wakeup_reason;
 	wakeup_reason = esp_sleep_get_wakeup_cause(); // get wake up reason
 	Wire.begin(SDA, SCL); // init i2c
+	RTC.init();
+	display.init(0, displayFullInit, 10, true); // 10ms by spec, and fast pulldown reset
+	display.epd2.setBusyCallback(displayBusyCallback);
 	switch (wakeup_reason) {
-		#ifdef ESP_RTC
-		case ESP_SLEEP_WAKEUP_TIMER: // ESP Internal RTC
-			Serial.println("ESP RTC");
-			if(guiState == WATCHFACE_STATE){
-				RTC.read(currentTime);
-				currentTime.Minute++;
-				tmElements_t tm;
-				tm.Month = currentTime.Month;
-				tm.Day = currentTime.Day;
-				tm.Year = currentTime.Year;
-				tm.Hour = currentTime.Hour;
-				tm.Minute = currentTime.Minute;
-				tm.Second = 0;
-				//time_t t = makeTime(tm); // Watchy v1.2.8 and up does this step for us
-				RTC.set(tm);
-				RTC.read(currentTime);
-				showWatchFace(true); // partial updates on tick
-			}
-			break;
-		#endif
 		case ESP_SLEEP_WAKEUP_EXT0: // RTC Alarm
 			Serial.println("RTC alarm");
 			RTC.clearAlarm(); // resets the alarm flag in the RTC
@@ -501,10 +485,9 @@ void WatchyMZA::init(String datetime) {
 			Serial.println("reset");
 			#ifdef DEBUG
 				Serial.println("debug mode");
+				Serial.println(YEAR_OFFSET);
 			#endif
-			#ifndef ESP_RTC
-				RTC.config(datetime);
-			#endif
+			RTC.config(datetime);
 			_bmaConfig();
 //			Serial.println("full update");
 			RTC.read(currentTime);
