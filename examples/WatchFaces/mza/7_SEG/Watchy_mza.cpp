@@ -238,6 +238,7 @@ void WatchyMZA::showWatchFace(bool partialRefresh) {
 	display.setFullWindow();
 	drawWatchFace();
 	display.display(partialRefresh);
+	guiState = WATCHFACE_STATE;
 }
 
 void WatchyMZA::drawWatchFace(){
@@ -485,7 +486,7 @@ void WatchyMZA::init(String datetime) {
 			Serial.println("reset");
 			#ifdef DEBUG
 				Serial.println("debug mode");
-				Serial.println(YEAR_OFFSET);
+				//Serial.println(YEAR_OFFSET);
 			#endif
 			RTC.config(datetime);
 			_bmaConfig();
