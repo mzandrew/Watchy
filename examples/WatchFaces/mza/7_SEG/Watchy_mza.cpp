@@ -84,12 +84,15 @@ void sendNTPpacket(IPAddress &address) {
 void WatchyMZA::setTimeViaNTP() {
 	if (connectWiFi()) {
 		unsigned int localPort = 2390; // local port to listen for UDP packets
-		IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
+		//IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
+		IPAddress timeServer(132, 163, 96, 2); // time-b-b.nist.gov NTP server
 		UDP.begin(localPort);
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
-		delay(TIME_SET_DELAY_MS);
+		//delay(TIME_SET_DELAY_MS);
 		if ( UDP.parsePacket() ) {
+			Serial.println("blah1");
 			UDP.read(packetBuffer, MY_NTP_PACKET_SIZE); // read the packet into the buffer
+			Serial.println("blah2");
 			unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
 			unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
 			unsigned long secsSince1900 = highWord << 16 | lowWord;
@@ -108,6 +111,7 @@ void WatchyMZA::setTimeViaNTP() {
 			epoch += fudge;
 			sprintf(timestring, "%02ld:%02ld:%02ld", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
 			Serial.print("setting time to "); Serial.println(timestring);
+			Serial.println("blah3");
 			tmElements_t epoch_tm;
 			breakTime(epoch, epoch_tm);
 			// tmElements_t tm = localtime(&epoch); // error: conversion from 'tm*' to non-scalar type 'tmElements_t' requested
@@ -115,7 +119,9 @@ void WatchyMZA::setTimeViaNTP() {
 			// tm epoch_tm = localtime(epoch); // error: invalid conversion from 'time_t' {aka 'long int'} to 'const time_t*' {aka 'const long int*'} [-fpermissive]
 			// tm epoch_tm = localtime(&epoch); // error: conversion from 'tm*' to non-scalar type 'tm' requested
 			// error: no matching function for call to 'WatchyRTC::set(tm*&)'
+			Serial.println("blah4");
 			RTC.set(epoch_tm); // set time on RTC
+			Serial.println("blah5");
 		} else {
 			Serial.println("didn't get a response");
 		}
@@ -228,6 +234,12 @@ int WatchyMZA::MQTT_connect() {
 	return 1;
 }
 
+void WatchyMZA::showWatchFace(bool partialRefresh) {
+	display.setFullWindow();
+	drawWatchFace();
+	display.display(partialRefresh);
+}
+
 void WatchyMZA::drawWatchFace(){
 	display.fillScreen(DARKMODE ? GxEPD_BLACK : GxEPD_WHITE);
 	display.setTextColor(DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
@@ -259,14 +271,7 @@ void WatchyMZA::drawWatchFace(){
 #else
 	if (currentTime.Hour==23 && currentTime.Minute==59) {
 #endif
-		oldStepCount = sensor.getCounter();
-		if (oldStepCount) {
-			sensor.resetStepCounter();
-			oldStepCount = uploadSteps(oldStepCount);
-			if (oldStepCount) {
-				reallyOldStepCount += oldStepCount;
-			}
-		}
+		upload_step_count_and_clear();
 	}
 #endif
 	drawSteps();
@@ -313,6 +318,17 @@ void WatchyMZA::drawTime(){
 	display.print(timestring);
 	sprintf(timestring, "%2d:%02d:%02d %s", hour, minute, second, ampm.c_str());
 	Serial.println(timestring);
+}
+
+void WatchyMZA::upload_step_count_and_clear() {
+	oldStepCount = sensor.getCounter();
+	if (oldStepCount) {
+		sensor.resetStepCounter();
+		oldStepCount = uploadSteps(oldStepCount);
+		if (oldStepCount) {
+			reallyOldStepCount += oldStepCount;
+		}
+	}
 }
 
 uint32_t WatchyMZA::uploadSteps(uint32_t steps) {
@@ -367,11 +383,11 @@ void WatchyMZA::drawBattery(){
     float VBAT = getBatteryVoltage();
     if(VBAT > 4.1){
         batteryLevel = 3;
-    } else if(VBAT > 3.95 && VBAT <= 4.1){
+    } else if(VBAT > 3.95){
         batteryLevel = 2;
-    } else if(VBAT > 3.80 && VBAT <= 3.95){
+    } else if(VBAT > 3.80){
         batteryLevel = 1;
-    } else if(VBAT <= 3.80){
+    } else {
         batteryLevel = 0;
     }
     for(int8_t batterySegments = 0; batterySegments < batteryLevel; batterySegments++){
@@ -491,10 +507,32 @@ void WatchyMZA::init(String datetime) {
 			#endif
 			_bmaConfig();
 //			Serial.println("full update");
+			RTC.read(currentTime);
 			showWatchFace(false); //full update on reset
 			break;
 	}
 	deepSleep();
+}
+
+void WatchyMZA::handleButtonPress() {
+	Serial.println("mybuttonhandler");
+	uint64_t wakeupBit = esp_sleep_get_ext1_wakeup_status();
+	//Serial.println(wakeupBit);
+	pinMode(MENU_BTN_PIN, INPUT);
+	pinMode(BACK_BTN_PIN, INPUT);
+	pinMode(UP_BTN_PIN, INPUT);
+	pinMode(DOWN_BTN_PIN, INPUT);
+	if ((wakeupBit & MENU_BTN_MASK) || digitalRead(MENU_BTN_PIN)) { // lower left
+		Serial.println("lower left");
+	} else if ((wakeupBit & BACK_BTN_MASK) || digitalRead(BACK_BTN_PIN)) { // upper left
+		Serial.println("upper left");
+		upload_step_count_and_clear();
+	} else if ((wakeupBit & UP_BTN_MASK) || digitalRead(UP_BTN_PIN)) { // upper right
+		Serial.println("upper right");
+		setTimeViaNTP();
+	} else if ((wakeupBit & DOWN_BTN_MASK) || digitalRead(DOWN_BTN_PIN)) { // lower right
+		Serial.println("lower right");
+	}
 }
 
 uint16_t WatchyMZA::_readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len) {
@@ -513,7 +551,7 @@ uint16_t WatchyMZA::_writeRegister(uint8_t address, uint8_t reg, uint8_t *data, 
     Wire.beginTransmission(address);
     Wire.write(reg);
     Wire.write(data, len);
-    return (0 !=  Wire.endTransmission());
+    return (0 != Wire.endTransmission());
 }
 
 void WatchyMZA::_bmaConfig() {
