@@ -19,7 +19,7 @@
 #define RESETSTEPSEVERYDAY
 //#define WEATHER
 //#define DEBUG
-#define TIME_SET_DELAY_S (3) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
+#define TIME_SET_DELAY_S (2) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
 #define TIME_SET_DELAY_MS (1850) // extra negative fudge factor to tweak time (milliseconds, should be at least 1000 to wait for the ntp packet response)
 
 #define BATTERY_SEGMENT_WIDTH   (7)
@@ -42,6 +42,7 @@
 #define Y_POSITION_BLE         (Y_POSITION_OTHER+10)
 #define Y_POSITION_TEMPERATURE (Y_POSITION_OTHER+TEMPERATURE_HEIGHT+10)
 #define Y_POSITION_STEPS       (167)
+#define Y_POSITION_OLDSTEPS    (167-HEIGHT_STEPS-5)
 #define Y_POSITION_BATTERY     (Y_POSITION_TEMPERATURE+BATTERY_SEGMENT_HEIGHT-2)
 
 #ifdef TWELVEHOURMODE
@@ -88,7 +89,7 @@ void WatchyMZA::setTimeViaNTP() {
 		IPAddress timeServer(132, 163, 96, 2); // time-b-b.nist.gov NTP server
 		UDP.begin(localPort);
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
-		//delay(TIME_SET_DELAY_MS);
+		delay(TIME_SET_DELAY_MS);
 		if ( UDP.parsePacket() ) {
 			Serial.println("blah1");
 			UDP.read(packetBuffer, MY_NTP_PACKET_SIZE); // read the packet into the buffer
@@ -220,7 +221,7 @@ void WatchyMZA::disconnectWiFi() {
 int WatchyMZA::MQTT_connect() {
 	int8_t ret;
 	if (mqtt.connected()) { return 1; } // Stop if already connected.
-	Serial.print("Connecting to MQTT... ");
+	Serial.println("Connecting to MQTT... ");
 	uint8_t retries = 3;
 	while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
 		Serial.println(mqtt.connectErrorString(ret));
@@ -276,6 +277,7 @@ void WatchyMZA::drawWatchFace(){
 	}
 #endif
 	drawSteps();
+	drawOldSteps();
 	#ifdef WEATHER
 		if (weatherIntervalCounter >= WEATHER_UPDATE_INTERVAL) {
 			getWeatherData();
@@ -375,6 +377,12 @@ void WatchyMZA::drawSteps(){
     display.setCursor(35, Y_POSITION_STEPS+HEIGHT_STEPS);
     display.setFont(&DSEG7_Classic_Bold_25);
     display.println(stepCount);
+}
+
+void WatchyMZA::drawOldSteps(){
+    display.setCursor(5, Y_POSITION_OLDSTEPS+HEIGHT_STEPS);
+    display.setFont(&DSEG7_Classic_Bold_25);
+    display.println(reallyOldStepCount);
 }
 
 void WatchyMZA::drawBattery(){
@@ -508,9 +516,17 @@ void WatchyMZA::handleButtonPress() {
 	pinMode(DOWN_BTN_PIN, INPUT);
 	if ((wakeupBit & MENU_BTN_MASK) || digitalRead(MENU_BTN_PIN)) { // lower left
 		Serial.println("lower left");
+		if (reallyOldStepCount) {
+			reallyOldStepCount = uploadSteps(reallyOldStepCount);
+		}
+		if (reallyOldStepCount) {
+			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
+		}
+		upload_step_count_and_clear();
 	} else if ((wakeupBit & BACK_BTN_MASK) || digitalRead(BACK_BTN_PIN)) { // upper left
 		Serial.println("upper left");
-		upload_step_count_and_clear();
+		RTC.read(currentTime);
+		showWatchFace(true); // partial update
 	} else if ((wakeupBit & UP_BTN_MASK) || digitalRead(UP_BTN_PIN)) { // upper right
 		Serial.println("upper right");
 		setTimeViaNTP();
@@ -540,6 +556,7 @@ uint16_t WatchyMZA::_writeRegister(uint8_t address, uint8_t reg, uint8_t *data, 
 
 void WatchyMZA::_bmaConfig() {
 	if (sensor.begin(_readRegister, _writeRegister, delay) == false) {
+		Serial.println("failed to init bma");
 		return; //fail to init BMA
 	}
 	// Accel parameter structure

@@ -19,6 +19,7 @@ class WatchyMZA : public Watchy {
 		void drawDate();
 		void drawDayName();
 		void drawSteps();
+		void drawOldSteps();
 		void drawWeather();
 		void drawBattery();
 		int connectWiFi();
@@ -33,7 +34,6 @@ class WatchyMZA : public Watchy {
 	private:
 		static uint16_t _readRegister(uint8_t, uint8_t, uint8_t *, uint16_t);
 		static uint16_t _writeRegister(uint8_t, uint8_t, uint8_t *, uint16_t);
-		void _rtcConfig(String);
 		void _bmaConfig();
 };
 
