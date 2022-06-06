@@ -528,10 +528,10 @@ void WatchyMZA::handleButtonPress() {
 		RTC.read(currentTime);
 		showWatchFace(true); // partial update
 	} else if ((wakeupBit & UP_BTN_MASK) || digitalRead(UP_BTN_PIN)) { // upper right
-		Serial.println("upper right; set time via NTP");
-		setTimeViaNTP();
+		Serial.println("upper right");
 	} else if ((wakeupBit & DOWN_BTN_MASK) || digitalRead(DOWN_BTN_PIN)) { // lower right
-		Serial.println("lower right");
+		Serial.println("lower right; set time via NTP");
+		setTimeViaNTP();
 	}
 }
 
