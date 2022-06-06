@@ -253,6 +253,14 @@ void WatchyMZA::drawWatchFace(){
 //	if(BLE_CONFIGURED){
 //		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	}
+#ifdef DEBUG
+	if (currentTime.Minute==57) {
+//	if (currentTime.Minute%10==0) {
+#else
+	if (currentTime.Hour==23 && currentTime.Minute==57) {
+#endif
+		setTimeViaNTP();
+	}
 #ifdef RESETSTEPSEVERYDAY
 #ifdef DEBUG
 	if (currentTime.Minute==58) {
@@ -260,12 +268,7 @@ void WatchyMZA::drawWatchFace(){
 #else
 	if (currentTime.Hour==23 && currentTime.Minute==58) {
 #endif
-		if (reallyOldStepCount) {
-			reallyOldStepCount = uploadSteps(reallyOldStepCount);
-		}
-		if (reallyOldStepCount) {
-			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
-		}
+		upload_old_step_count_and_clear();
 	}
 #ifdef DEBUG
 	if (currentTime.Minute==59) {
@@ -287,14 +290,7 @@ void WatchyMZA::drawWatchFace(){
 		}
 		drawWeather();
 	#endif
-#ifdef DEBUG
-	if (currentTime.Minute==57) {
-//	if (currentTime.Minute%10==0) {
-#else
-	if (currentTime.Hour==23 && currentTime.Minute==57) {
-#endif
-		setTimeViaNTP();
-	}
+	mqtt.disconnect();
 	disconnectWiFi();
 	btStop();
 }
@@ -323,6 +319,15 @@ void WatchyMZA::drawTime(){
 	Serial.println(timestring);
 }
 
+void WatchyMZA::upload_old_step_count_and_clear() {
+	if (reallyOldStepCount) {
+		reallyOldStepCount = uploadSteps(reallyOldStepCount);
+	}
+	if (reallyOldStepCount) {
+		Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
+	}
+}
+
 void WatchyMZA::upload_step_count_and_clear() {
 	oldStepCount = sensor.getCounter();
 	if (oldStepCount) {
@@ -339,8 +344,6 @@ uint32_t WatchyMZA::uploadSteps(uint32_t steps) {
 		Serial.print("current step count: "); Serial.println(steps);
 		if (connectWiFi() && MQTT_connect()) {
 			feed.publish(steps); // upload this somewhere
-			mqtt.disconnect();
-			disconnectWiFi();
 			Serial.print("published step count: "); Serial.println(steps);
 			steps = 0;
 		} else {
@@ -515,20 +518,17 @@ void WatchyMZA::handleButtonPress() {
 	pinMode(UP_BTN_PIN, INPUT);
 	pinMode(DOWN_BTN_PIN, INPUT);
 	if ((wakeupBit & MENU_BTN_MASK) || digitalRead(MENU_BTN_PIN)) { // lower left
-		Serial.println("lower left");
-		if (reallyOldStepCount) {
-			reallyOldStepCount = uploadSteps(reallyOldStepCount);
-		}
-		if (reallyOldStepCount) {
-			Serial.print("current really old step count: "); Serial.println(reallyOldStepCount);
-		}
+		Serial.println("lower left; upload step count and clear");
+		upload_old_step_count_and_clear();
 		upload_step_count_and_clear();
+		mqtt.disconnect();
+		disconnectWiFi();
 	} else if ((wakeupBit & BACK_BTN_MASK) || digitalRead(BACK_BTN_PIN)) { // upper left
-		Serial.println("upper left");
+		Serial.println("upper left; refresh screen immediately");
 		RTC.read(currentTime);
 		showWatchFace(true); // partial update
 	} else if ((wakeupBit & UP_BTN_MASK) || digitalRead(UP_BTN_PIN)) { // upper right
-		Serial.println("upper right");
+		Serial.println("upper right; set time via NTP");
 		setTimeViaNTP();
 	} else if ((wakeupBit & DOWN_BTN_MASK) || digitalRead(DOWN_BTN_PIN)) { // lower right
 		Serial.println("lower right");

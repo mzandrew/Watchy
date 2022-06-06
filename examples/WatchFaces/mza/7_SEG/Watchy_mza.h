@@ -25,6 +25,7 @@ class WatchyMZA : public Watchy {
 		int connectWiFi();
 		void disconnectWiFi();
 		int MQTT_connect();
+		void upload_old_step_count_and_clear();
 		void upload_step_count_and_clear();
 		uint32_t uploadSteps(uint32_t);
 		void setTimeViaNTP();
