@@ -19,8 +19,8 @@
 #define RESETSTEPSEVERYDAY
 //#define WEATHER
 //#define DEBUG
-#define TIME_SET_DELAY_S (2) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
-#define TIME_SET_DELAY_MS (1850) // extra negative fudge factor to tweak time (milliseconds, should be at least 1000 to wait for the ntp packet response)
+#define TIME_SET_DELAY_S (0) // positive fudge factor to allow for upload time, etc. (seconds, YMMV)
+//#define TIME_SET_DELAY_MS (1850) // extra negative fudge factor to tweak time (milliseconds, should be at least 1000 to wait for the ntp packet response)
 
 #define BATTERY_SEGMENT_WIDTH   (7)
 #define BATTERY_SEGMENT_HEIGHT  (11)
@@ -66,34 +66,49 @@ byte packetBuffer[ MY_NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing 
 WiFiUDP UDP;
 
 void sendNTPpacket(IPAddress &address) {
-  memset(packetBuffer, 0, MY_NTP_PACKET_SIZE);
-  packetBuffer[0] = 0b11100011; // LI, Version, Mode
-  packetBuffer[1] = 0;          // Stratum, or type of clock
-  packetBuffer[2] = 6;          // Polling Interval
-  packetBuffer[3] = 0xEC;       // Peer Clock Precision
-  // 8 bytes of zero for Root Delay & Root Dispersion
-  packetBuffer[12]  = 49;
-  packetBuffer[13]  = 0x4E;
-  packetBuffer[14]  = 49;
-  packetBuffer[15]  = 52;
-  UDP.beginPacket(address, 123); // NTP requests are to port 123
-  UDP.write(packetBuffer, MY_NTP_PACKET_SIZE);
-  UDP.endPacket();
+	memset(packetBuffer, 0, MY_NTP_PACKET_SIZE);
+	packetBuffer[0] = 0b11100011; // LI, Version, Mode
+	packetBuffer[1] = 0;          // Stratum, or type of clock
+	packetBuffer[2] = 6;          // Polling Interval
+	packetBuffer[3] = 0xEC;       // Peer Clock Precision
+	// 8 bytes of zero for Root Delay & Root Dispersion
+	packetBuffer[12]  = 49;
+	packetBuffer[13]  = 0x4E;
+	packetBuffer[14]  = 49;
+	packetBuffer[15]  = 52;
+	unsigned int localPort = 2390; // local port to listen for UDP packets
+	UDP.begin(localPort);
+	UDP.beginPacket(address, 123); // NTP requests are to port 123
+	UDP.write(packetBuffer, MY_NTP_PACKET_SIZE);
+	int value = UDP.endPacket();
+//	if (value) {
+//		Serial.println("UDP sendto has a return value:");
+//		Serial.println(value);
+//	}
 }
 
 // sendNTPpacket and NTP function code are from Arduino/libraries/WiFi101/examples/WiFiUdpNtpClient/WiFiUdpNtpClient.ino
 void WatchyMZA::setTimeViaNTP() {
 	if (connectWiFi()) {
-		unsigned int localPort = 2390; // local port to listen for UDP packets
 		//IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
 		IPAddress timeServer(132, 163, 96, 2); // time-b-b.nist.gov NTP server
-		UDP.begin(localPort);
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
-		delay(TIME_SET_DELAY_MS);
-		if ( UDP.parsePacket() ) {
-			Serial.println("blah1");
+		int numbytes = 0;
+		int response_delay_amount = 0;
+		for (int i=0; i<50; i++) {
+			numbytes = UDP.parsePacket(); // returns the number of bytes
+			Serial.println(numbytes);
+			if (numbytes) {
+				break;
+			}
+			delay(100);
+			response_delay_amount += 100;
+		}
+		//delay(TIME_SET_DELAY_MS);
+		if ( numbytes ) {
+			Serial.println("took this many milliseconds to get response:");
+			Serial.println(response_delay_amount);
 			UDP.read(packetBuffer, MY_NTP_PACKET_SIZE); // read the packet into the buffer
-			Serial.println("blah2");
 			unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
 			unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
 			unsigned long secsSince1900 = highWord << 16 | lowWord;
@@ -112,7 +127,6 @@ void WatchyMZA::setTimeViaNTP() {
 			epoch += fudge;
 			sprintf(timestring, "%02ld:%02ld:%02ld", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
 			Serial.print("setting time to "); Serial.println(timestring);
-			Serial.println("blah3");
 			tmElements_t epoch_tm;
 			breakTime(epoch, epoch_tm);
 			// tmElements_t tm = localtime(&epoch); // error: conversion from 'tm*' to non-scalar type 'tmElements_t' requested
@@ -120,13 +134,19 @@ void WatchyMZA::setTimeViaNTP() {
 			// tm epoch_tm = localtime(epoch); // error: invalid conversion from 'time_t' {aka 'long int'} to 'const time_t*' {aka 'const long int*'} [-fpermissive]
 			// tm epoch_tm = localtime(&epoch); // error: conversion from 'tm*' to non-scalar type 'tm' requested
 			// error: no matching function for call to 'WatchyRTC::set(tm*&)'
-			Serial.println("blah4");
 			RTC.set(epoch_tm); // set time on RTC
-			Serial.println("blah5");
 		} else {
 			Serial.println("didn't get a response");
+			String ssid = WiFi.SSID();
+			Serial.println("ssid:");
+			Serial.println(ssid);
+			int32_t rssi = WiFi.RSSI();
+			Serial.println("rssi:");
+			Serial.println(rssi);
+			//int pingtime = WiFi.ping("google.com");
+			//Serial.println("ping time (google.com):");
+			//Serial.println(pingtime);
 		}
-		disconnectWiFi();
 	}
 }
 
@@ -186,6 +206,7 @@ int WatchyMZA::connectWiFi() {
 		return 1;
 	}
 	Serial.print("Connecting to " WLAN_SSID "... ");
+	WiFi.hostname(WIFI_HOSTNAME);
 	WiFi.begin(WLAN_SSID, WLAN_PASS);
 #define MAX_RETRIES (60)
 	uint8_t retries = MAX_RETRIES;
@@ -425,7 +446,6 @@ void WatchyMZA::getWeatherData() {
 			Serial.println(" error fetching weather data");
 		}
 		http.end();
-		disconnectWiFi();
 	} else { // No WiFi, use RTC Temperature
 		uint8_t temperature = RTC.temperature() / 4; //celsius
 		if(strcmp(TEMP_UNIT, "imperial") == 0) {
@@ -521,8 +541,6 @@ void WatchyMZA::handleButtonPress() {
 		Serial.println("lower left; upload step count and clear");
 		upload_old_step_count_and_clear();
 		upload_step_count_and_clear();
-		mqtt.disconnect();
-		disconnectWiFi();
 	} else if ((wakeupBit & BACK_BTN_MASK) || digitalRead(BACK_BTN_PIN)) { // upper left
 		Serial.println("upper left; refresh screen immediately");
 		RTC.read(currentTime);
@@ -533,6 +551,9 @@ void WatchyMZA::handleButtonPress() {
 		Serial.println("lower right; set time via NTP");
 		setTimeViaNTP();
 	}
+	mqtt.disconnect();
+	disconnectWiFi();
+	btStop();
 }
 
 uint16_t WatchyMZA::_readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len) {
