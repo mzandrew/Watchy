@@ -1,4 +1,5 @@
-// last updated 2022-06-04 by mza
+// last updated 2023-02-28 by mza
+// need to switch between board revisions in the arduino tools menu depending on whether this is a watchy v1 or v2
 
 #include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, MY_CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
 #include "Watchy_mza.h"
@@ -274,14 +275,17 @@ void WatchyMZA::drawWatchFace(){
 //	if(BLE_CONFIGURED){
 //		display.drawBitmap(X_POSITION_BLE, Y_POSITION_BLE, bluetooth, 13, 21, DARKMODE ? GxEPD_WHITE : GxEPD_BLACK);
 //	}
+	bool should_setTimeViaNTP = false;
+	if (0==currentTime.Year) { should_setTimeViaNTP = true; }
+	if (0==currentTime.Month) { should_setTimeViaNTP = true; }
+	if (0==currentTime.Day) { should_setTimeViaNTP = true; }
 #ifdef DEBUG
-	if (currentTime.Minute==57) {
-//	if (currentTime.Minute%10==0) {
+	if (57==currentTime.Minute) { should_setTimeViaNTP = true; }
+//	if (0==currentTime.Minute%10) { should_setTimeViaNTP = true; }
 #else
-	if (currentTime.Hour==23 && currentTime.Minute==57) {
+	if (23==currentTime.Hour && 57==currentTime.Minute) { should_setTimeViaNTP = true; }
 #endif
-		setTimeViaNTP();
-	}
+	if (should_setTimeViaNTP) { setTimeViaNTP(); }
 #ifdef RESETSTEPSEVERYDAY
 #ifdef DEBUG
 	if (currentTime.Minute==58) {
