@@ -1,4 +1,4 @@
-// last updated 2023-02-28 by mza
+// last updated 2023-10-01 by mza
 // need to switch between board revisions in the arduino tools menu depending on whether this is a watchy v1 or v2
 
 #include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, MY_CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
@@ -62,12 +62,12 @@ RTC_DATA_ATTR uint32_t reallyOldStepCount = 0;
 
 RTC_DATA_ATTR bool wifi_active = false;
 
-const int MY_NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-byte packetBuffer[ MY_NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
+//const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
+byte packetBuffer[ NTP_PACKET_SIZE]; // buffer to hold incoming and outgoing packets
 WiFiUDP UDP;
 
 void sendNTPpacket(IPAddress &address) {
-	memset(packetBuffer, 0, MY_NTP_PACKET_SIZE);
+	memset(packetBuffer, 0, NTP_PACKET_SIZE);
 	packetBuffer[0] = 0b11100011; // LI, Version, Mode
 	packetBuffer[1] = 0;          // Stratum, or type of clock
 	packetBuffer[2] = 6;          // Polling Interval
@@ -80,8 +80,9 @@ void sendNTPpacket(IPAddress &address) {
 	unsigned int localPort = 2390; // local port to listen for UDP packets
 	UDP.begin(localPort);
 	UDP.beginPacket(address, 123); // NTP requests are to port 123
-	UDP.write(packetBuffer, MY_NTP_PACKET_SIZE);
-	int value = UDP.endPacket();
+	UDP.write(packetBuffer, NTP_PACKET_SIZE);
+	UDP.endPacket();
+//	int value = UDP.endPacket();
 //	if (value) {
 //		Serial.println("UDP sendto has a return value:");
 //		Serial.println(value);
@@ -91,25 +92,31 @@ void sendNTPpacket(IPAddress &address) {
 // sendNTPpacket and NTP function code are from Arduino/libraries/WiFi101/examples/WiFiUdpNtpClient/WiFiUdpNtpClient.ino
 void WatchyMZA::setTimeViaNTP() {
 	if (connectWiFi()) {
-		//IPAddress timeServer(132, 163, 97, 4); // ntp1.glb.nist.gov NTP server
-		IPAddress timeServer(132, 163, 96, 2); // time-b-b.nist.gov NTP server
+		IPAddress timeServer(129, 6, 15, 30); // time-c-g.nist.gov NTP server
+		//IPAddress timeServer(132, 163, 97, 4); // time-d-wwv.nist.gov NTP server
+		//IPAddress timeServer(132, 163, 96, 2); // time-b-b.nist.gov NTP server
+		//IPAddress timeServer(132, 163, 96, 3); // time-b-b.nist.gov NTP server
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
 		int numbytes = 0;
 		int response_delay_amount = 0;
-		for (int i=0; i<50; i++) {
-			numbytes = UDP.parsePacket(); // returns the number of bytes
-			Serial.println(numbytes);
-			if (numbytes) {
-				break;
+		for (int i=0; i<5; i++) {
+			Serial.print("number of bytes in response so far: ");
+			for (int j=0; j<10; j++) {
+				numbytes = UDP.parsePacket(); // returns the number of bytes
+				Serial.print(numbytes);
+				if (numbytes) { break; }
+				Serial.print(",");
+				delay(100);
+				response_delay_amount += 100;
 			}
-			delay(100);
-			response_delay_amount += 100;
+			if (numbytes) { break; }
+			Serial.println("");
 		}
+		Serial.println("");
 		//delay(TIME_SET_DELAY_MS);
 		if ( numbytes ) {
-			Serial.println("took this many milliseconds to get response:");
-			Serial.println(response_delay_amount);
-			UDP.read(packetBuffer, MY_NTP_PACKET_SIZE); // read the packet into the buffer
+			Serial.print("took this many milliseconds to get response:"); Serial.println(response_delay_amount);
+			UDP.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
 			unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
 			unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
 			unsigned long secsSince1900 = highWord << 16 | lowWord;
@@ -124,6 +131,7 @@ void WatchyMZA::setTimeViaNTP() {
 	//		Serial.print("epoch time (local) = "); Serial.println(epoch);
 			sprintf(timestring, "%02ld:%02ld:%02ld", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
 			Serial.print("ntp server responded with "); Serial.println(timestring);
+			Serial.flush();
 			const time_t fudge(TIME_SET_DELAY_S);
 			epoch += fudge;
 			sprintf(timestring, "%02ld:%02ld:%02ld", (epoch%86400)/3600, (epoch%3600)/60, epoch%60);
@@ -179,26 +187,31 @@ Adafruit_MQTT_Publish feed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/"
 // io.adafruit.com root CA
 const char* adafruitio_root_ca = \
     "-----BEGIN CERTIFICATE-----\n" \
-    "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n" \
-    "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n" \
-    "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n" \
-    "QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n" \
-    "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n" \
-    "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n" \
-    "9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n" \
-    "CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n" \
-    "nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n" \
-    "43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n" \
-    "T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n" \
-    "gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n" \
-    "BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n" \
-    "TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n" \
-    "DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n" \
-    "hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n" \
-    "06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n" \
-    "PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n" \
-    "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n" \
-    "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n" \
+      "MIIEjTCCA3WgAwIBAgIQDQd4KhM/xvmlcpbhMf/ReTANBgkqhkiG9w0BAQsFADBh\n"
+      "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
+      "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH\n"
+      "MjAeFw0xNzExMDIxMjIzMzdaFw0yNzExMDIxMjIzMzdaMGAxCzAJBgNVBAYTAlVT\n"
+      "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
+      "b20xHzAdBgNVBAMTFkdlb1RydXN0IFRMUyBSU0EgQ0EgRzEwggEiMA0GCSqGSIb3\n"
+      "DQEBAQUAA4IBDwAwggEKAoIBAQC+F+jsvikKy/65LWEx/TMkCDIuWegh1Ngwvm4Q\n"
+      "yISgP7oU5d79eoySG3vOhC3w/3jEMuipoH1fBtp7m0tTpsYbAhch4XA7rfuD6whU\n"
+      "gajeErLVxoiWMPkC/DnUvbgi74BJmdBiuGHQSd7LwsuXpTEGG9fYXcbTVN5SATYq\n"
+      "DfbexbYxTMwVJWoVb6lrBEgM3gBBqiiAiy800xu1Nq07JdCIQkBsNpFtZbIZhsDS\n"
+      "fzlGWP4wEmBQ3O67c+ZXkFr2DcrXBEtHam80Gp2SNhou2U5U7UesDL/xgLK6/0d7\n"
+      "6TnEVMSUVJkZ8VeZr+IUIlvoLrtjLbqugb0T3OYXW+CQU0kBAgMBAAGjggFAMIIB\n"
+      "PDAdBgNVHQ4EFgQUlE/UXYvkpOKmgP792PkA76O+AlcwHwYDVR0jBBgwFoAUTiJU\n"
+      "IBiV5uNu5g/6+rkS7QYXjzkwDgYDVR0PAQH/BAQDAgGGMB0GA1UdJQQWMBQGCCsG\n"
+      "AQUFBwMBBggrBgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMDQGCCsGAQUFBwEB\n"
+      "BCgwJjAkBggrBgEFBQcwAYYYaHR0cDovL29jc3AuZGlnaWNlcnQuY29tMEIGA1Ud\n"
+      "HwQ7MDkwN6A1oDOGMWh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydEds\n"
+      "b2JhbFJvb3RHMi5jcmwwPQYDVR0gBDYwNDAyBgRVHSAAMCowKAYIKwYBBQUHAgEW\n"
+      "HGh0dHBzOi8vd3d3LmRpZ2ljZXJ0LmNvbS9DUFMwDQYJKoZIhvcNAQELBQADggEB\n"
+      "AIIcBDqC6cWpyGUSXAjjAcYwsK4iiGF7KweG97i1RJz1kwZhRoo6orU1JtBYnjzB\n"
+      "c4+/sXmnHJk3mlPyL1xuIAt9sMeC7+vreRIF5wFBC0MCN5sbHwhNN1JzKbifNeP5\n"
+      "ozpZdQFmkCo+neBiKR6HqIA+LMTMCMMuv2khGGuPHmtDze4GmEGZtYLyF8EQpa5Y\n"
+      "jPuV6k2Cr/N3XxFpT3hRpt/3usU/Zb9wfKPtWpoznZ4/44c1p9rzFcZYrWkj3A+7\n"
+      "TNBJE0GmP2fhXhP1D/XVfIW/h0yCJGEiV9Glm/uGOa3DXHlmbAcxSyCRraG+ZBkA\n"
+      "7h4SeM6Y8l/7MBRpPCz6l8Y=\n"
     "-----END CERTIFICATE-----\n";
 
 int WatchyMZA::connectWiFi() {
@@ -519,6 +532,7 @@ void WatchyMZA::init(String datetime) {
 		default: //reset
 			Serial.println("");
 			Serial.println("reset");
+			Serial.println(WIFI_HOSTNAME);
 			#ifdef DEBUG
 				Serial.println("debug mode");
 				//Serial.println(YEAR_OFFSET);
