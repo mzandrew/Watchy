@@ -1,4 +1,4 @@
-// last updated 2023-10-01 by mza
+// last updated 2023-11-14 by mza
 // need to switch between board revisions in the arduino tools menu depending on whether this is a watchy v1 or v2
 
 #include "secrets.h" // WLAN_SSID, WLAN_PASS, AIO_USERNAME, AIO_FEED, AIO_KEY, UTC_OFFSET_HOURS, MY_CITY_NAME, COUNTRY_CODE, TEMP_UNIT in secrets.h
@@ -92,20 +92,20 @@ void sendNTPpacket(IPAddress &address) {
 // sendNTPpacket and NTP function code are from Arduino/libraries/WiFi101/examples/WiFiUdpNtpClient/WiFiUdpNtpClient.ino
 void WatchyMZA::setTimeViaNTP() {
 	if (connectWiFi()) {
-		IPAddress timeServer(129, 6, 15, 30); // time-c-g.nist.gov NTP server
-		//IPAddress timeServer(132, 163, 97, 4); // time-d-wwv.nist.gov NTP server
+		//IPAddress timeServer(129, 6, 15, 30); // time-c-g.nist.gov NTP server
+		IPAddress timeServer(132, 163, 97, 4); // time-d-wwv.nist.gov NTP server
 		//IPAddress timeServer(132, 163, 96, 2); // time-b-b.nist.gov NTP server
 		//IPAddress timeServer(132, 163, 96, 3); // time-b-b.nist.gov NTP server
 		sendNTPpacket(timeServer); // send an NTP packet to a time server
 		int numbytes = 0;
 		int response_delay_amount = 0;
-		for (int i=0; i<5; i++) {
+		for (int i=0; i<6; i++) {
 			Serial.print("number of bytes in response so far: ");
 			for (int j=0; j<10; j++) {
 				numbytes = UDP.parsePacket(); // returns the number of bytes
 				Serial.print(numbytes);
 				if (numbytes) { break; }
-				Serial.print(",");
+				if (j<9) { Serial.print(","); }
 				delay(100);
 				response_delay_amount += 100;
 			}
@@ -433,9 +433,9 @@ void WatchyMZA::drawBattery(){
     float VBAT = getBatteryVoltage();
     if(VBAT > 4.1){
         batteryLevel = 3;
-    } else if(VBAT > 3.95){
+    } else if(VBAT > 3.9){
         batteryLevel = 2;
-    } else if(VBAT > 3.80){
+    } else if(VBAT > 3.7){
         batteryLevel = 1;
     } else {
         batteryLevel = 0;
@@ -517,7 +517,7 @@ void WatchyMZA::init(String datetime) {
 	display.epd2.setBusyCallback(displayBusyCallback);
 	switch (wakeup_reason) {
 		case ESP_SLEEP_WAKEUP_EXT0: // RTC Alarm
-			Serial.println("RTC alarm");
+			//Serial.println("RTC alarm");
 			RTC.clearAlarm(); // resets the alarm flag in the RTC
 			if(guiState == WATCHFACE_STATE){
 				RTC.read(currentTime);
@@ -564,7 +564,9 @@ void WatchyMZA::handleButtonPress() {
 		RTC.read(currentTime);
 		showWatchFace(true); // partial update
 	} else if ((wakeupBit & UP_BTN_MASK) || digitalRead(UP_BTN_PIN)) { // upper right
-		Serial.println("upper right");
+		Serial.println("upper right; show battery voltage");
+		float VBAT = getBatteryVoltage();
+		Serial.print("battery voltage = "); Serial.println(VBAT);
 	} else if ((wakeupBit & DOWN_BTN_MASK) || digitalRead(DOWN_BTN_PIN)) { // lower right
 		Serial.println("lower right; set time via NTP");
 		setTimeViaNTP();
